@@ -66,7 +66,7 @@ nav.tabs a.new.on{background:var(--gold);border-color:var(--gold);color:#fff}
 /* 主表格 */
 .tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .tbox{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:4px;overflow:hidden}
-table.ledger{border-collapse:separate;border-spacing:0 3px;min-width:1000px;width:100%}
+table.ledger{border-collapse:separate;border-spacing:0 3px;min-width:1060px;width:100%}
 .ledger th{background:var(--walnut);color:#fff3dd;text-align:left;vertical-align:bottom;padding:9px 9px;font-weight:600;font-size:13.5px;line-height:1.3;white-space:nowrap}
 .ledger th:first-child{border-radius:9px 0 0 9px} .ledger th:last-child{border-radius:0 9px 9px 0}
 .ledger td{padding:7px 9px;font-variant-numeric:tabular-nums;white-space:nowrap;vertical-align:middle}
@@ -81,6 +81,7 @@ table.ledger{border-collapse:separate;border-spacing:0 3px;min-width:1000px;widt
 .title-cell{max-width:230px;white-space:normal;line-height:1.35}
 .title-cell .t{font-weight:600}
 .title-cell .meta{font-size:12px;color:var(--ink2)}
+.plat{color:var(--walnut);font-weight:700}
 .chip{display:inline-block;background:var(--gold-soft);color:var(--gold-ink);border-radius:99px;padding:1px 9px;font-size:12px;margin:3px 3px 0 0}
 .unitbtn{border:1px solid var(--gold);background:#fffaf0;color:var(--gold-ink);border-radius:99px;padding:4px 11px;cursor:pointer;font-weight:600}
 .unitbtn:hover{background:var(--gold);color:#fff}
@@ -221,20 +222,21 @@ const today = () => new Date(Date.now() - new Date().getTimezoneOffset()*6e4).to
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c=='x'?r:(r&3|8)).toString(16)}));
 const STATUS = {stock:'在庫', reserved:'已預訂', sold:'已售出'};
 const METHODS = ['賣貨便','好賣+','面交','店到店','宅配／郵寄','蝦皮'];
+const PLATFORMS = ['BNS','台灣煤爐','日本煤爐','Buyee','樂淘'];
 const PLACES = ['蝦皮','Facebook 社團','Instagram','Threads','LINE 社群','場販'];
 function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2200); }
 
 /* ---------- 計算 ---------- */
 // 實際購買價：有填用填的；沒填 = 原價 × 匯率
 function paid(p){ return p.paid_twd != null ? +p.paid_twd : (p.price_jpy != null && p.rate != null ? Math.round(p.price_jpy * p.rate) : null); }
-// 總成本 = 實際購買價 + 運費 + 手續費 − 折扣
-function cost(p){ const a = paid(p); if (a == null) return null; return a + (+p.shipping||0) + (+p.fee||0) - (+p.discount||0); }
+// 總成本 = 實際購買價 + 運費 + 手續費 + 進貨稅金 − 折扣
+function cost(p){ const a = paid(p); if (a == null) return null; return a + (+p.shipping||0) + (+p.fee||0) + (+p.buy_tax||0) - (+p.discount||0); }
 const sold = u => u.status === 'sold';
 function soldTotal(p){ return (p.units||[]).reduce((s,u)=> s + (sold(u) ? (+u.sold_price||0) : 0), 0); }
 function taxTotal(p){ return (p.units||[]).reduce((s,u)=> s + (sold(u) ? (+u.tax||0) : 0), 0); }
 function soldCount(p){ return (p.units||[]).filter(sold).length; }
 function expectTotal(p){ return (p.units||[]).reduce((s,u)=> s + (sold(u) ? (+u.sold_price||0) : (+u.list_price||0)), 0); }
-// 利潤 = 已賣出 − 總成本 − 已賣出那幾隻的稅金
+// 利潤 = 已賣出 − 總成本 − 已賣出那幾隻的銷售稅金
 function profit(p){ const c = cost(p); return c == null ? null : soldTotal(p) - c - taxTotal(p); }
 function expectProfit(p){ const c = cost(p); return c == null ? null : expectTotal(p) - c - taxTotal(p); }
 // 每隻分攤成本：把「總成本」分給每一隻。每隻都有日幣價 → 照日幣價比例；否則平均。
@@ -410,25 +412,27 @@ const SupaStore = {
 
 function demoData(){
   const ym = (k) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth()-k); return ymLocal(d); };
-  const mk = (k, day, title, tags, jp, rate, ship, fee, disc, units) => ({ id: uuid(), title, source_url:'https://jp.mercari.com/', image_url:null,
+  const mk = (k, day, title, tags, jp, rate, ship, fee, disc, units, platform, btax) => ({ id: uuid(), title, source_url:'https://jp.mercari.com/', image_url:null,
+    platform, buy_tax: btax||0,
     purchase_date: `${ym(k)}-${day}`, price_jpy: jp, rate, paid_twd: null, shipping: ship, fee, discount: disc, tags, note:'範例資料',
     units: units.map((u,i)=>({ id:uuid(), sort:i, name:u[0], price_jpy:u[1], list_price:u[2], status:u[3], sold_price:u[4]??null, tax:u[5]??null,
       sold_place: u[3]==='sold' ? u[6] : null, trade_method: u[3]!=='stock' ? u[7] : null,
       sold_date: u[3]==='sold' ? `${ym(Math.max(0,k-1))}-15` : null })) });
   return [
-    mk(0,'05','暗殺教室 赤羽業 娃娃 3 隻組',['暗殺教室','娃娃'],5400,.212,180,30,0,[['業 A',1800,520,'sold',520,0,'Threads','賣貨便'],['業 B',1800,520,'reserved',null,null,null,'面交'],['渚',1800,480,'stock']]),
-    mk(1,'12','ぬい 2 隻＋徽章',['娃娃','徽章'],3800,.214,150,0,50,[['娃娃 1',1500,420,'sold',450,0,'Facebook 社團','賣貨便'],['娃娃 2',1500,420,'sold',420,0,'場販','面交'],['徽章',800,220,'stock']]),
-    mk(2,'20','壓克力立牌',['立牌'],2200,.216,90,30,0,[['立牌',2200,560,'sold',560,28,'蝦皮','店到店']]),
-    mk(3,'03','福袋 5 隻',['娃娃','福袋'],9000,.218,260,60,100,[['1',null,480,'sold',480,24,'蝦皮','店到店'],['2',null,480,'sold',500,0,'Threads','賣貨便'],['3',null,480,'sold',480,0,'場販','面交'],['4',null,480,'stock'],['5',null,480,'stock']])
+    mk(0,'05','暗殺教室 赤羽業 娃娃 3 隻組',['暗殺教室','娃娃'],5400,.212,180,30,0,[['業 A',1800,520,'sold',520,0,'Threads','賣貨便'],['業 B',1800,520,'reserved',null,null,null,'面交'],['渚',1800,480,'stock']],'BNS',60),
+    mk(1,'12','ぬい 2 隻＋徽章',['娃娃','徽章'],3800,.214,150,0,50,[['娃娃 1',1500,420,'sold',450,0,'Facebook 社團','賣貨便'],['娃娃 2',1500,420,'sold',420,0,'場販','面交'],['徽章',800,220,'stock']],'台灣煤爐',0),
+    mk(2,'20','壓克力立牌',['立牌'],2200,.216,90,30,0,[['立牌',2200,560,'sold',560,28,'蝦皮','店到店']],'BNS',25),
+    mk(3,'03','福袋 5 隻',['娃娃','福袋'],9000,.218,260,60,100,[['1',null,480,'sold',480,24,'蝦皮','店到店'],['2',null,480,'sold',500,0,'Threads','賣貨便'],['3',null,480,'sold',480,0,'場販','面交'],['4',null,480,'stock'],['5',null,480,'stock']],'日本煤爐',90)
   ];
 }
 
 /* ---------- 狀態 ---------- */
 let store = null, items = [], imgs = {};
-const ui = { q:'', tag:'', month:'', range:'12', sort:'date' };
+const ui = { q:'', tag:'', month:'', platform:'', range:'12', sort:'date' };
 
 async function reload(){ items = await store.list(); imgs = await store.imageUrls(items); }
 function allTags(){ const s = new Map(); items.forEach(p => (p.tags||[]).forEach(t => s.set(t, (s.get(t)||0)+1))); return [...s.entries()].sort((a,b)=>b[1]-a[1]).map(x=>x[0]); }
+function platforms(){ const s = new Set(PLATFORMS); items.forEach(p => { if (p.platform) s.add(p.platform); }); return [...s]; }
 function suggest(key, presets){ const s = new Set(presets); items.forEach(p => (p.units||[]).forEach(u => { if (u[key]) s.add(u[key]); })); return [...s]; }
 
 /* ---------- 路由 ---------- */
@@ -449,7 +453,8 @@ function filtered(){
   let list = items.filter(p => {
     if (ui.tag && !(p.tags||[]).includes(ui.tag)) return false;
     if (ui.month && !String(p.purchase_date).startsWith(ui.month)) return false;
-    if (q) { const hay = [p.title, p.note, p.source_url, ...(p.tags||[]), ...(p.units||[]).map(u=>[u.name,u.buyer,u.sold_place,u.trade_method].join(' '))].join(' ').toLowerCase(); if (!hay.includes(q)) return false; }
+    if (ui.platform && (p.platform||'（未填）') !== ui.platform) return false;
+    if (q) { const hay = [p.title, p.note, p.source_url, p.platform, ...(p.tags||[]), ...(p.units||[]).map(u=>[u.name,u.buyer,u.sold_place,u.trade_method].join(' '))].join(' ').toLowerCase(); if (!hay.includes(q)) return false; }
     return true;
   });
   const by = { date: (a,b) => String(b.purchase_date).localeCompare(String(a.purchase_date)),
@@ -461,6 +466,7 @@ function filtered(){
 function renderHome(){
   const tags = allTags();
   const months = [...new Set(items.map(p => String(p.purchase_date).slice(0,7)))].sort().reverse();
+  const usedPlats = [...new Set(items.map(p => p.platform||'（未填）'))];
   $('#app').innerHTML = `
     ${store.mode==='local' ? `<div class="banner">本機模式：資料只存在這台裝置的瀏覽器。在 config.js 填入 Supabase 設定即可改用雲端。
       <button class="btn small" id="exp">匯出 JSON</button> <button class="btn small" id="imp">匯入 JSON</button></div>` : ''}
@@ -469,6 +475,7 @@ function renderHome(){
       <input type="search" id="q" placeholder="搜尋名稱、標籤、買家、售出位置…" value="${esc(ui.q)}">
       <select id="tag"><option value="">全部標籤</option>${tags.map(t=>`<option ${t===ui.tag?'selected':''}>${esc(t)}</option>`).join('')}</select>
       <select id="month"><option value="">全部月份</option>${months.map(m=>`<option ${m===ui.month?'selected':''}>${m}</option>`).join('')}</select>
+      <select id="plat"><option value="">全部平台</option>${usedPlats.map(m=>`<option ${m===ui.platform?'selected':''}>${esc(m)}</option>`).join('')}</select>
       <select id="sort"><option value="date">依購買日</option><option value="profit">依利潤</option><option value="cost">依成本</option><option value="unsold">未售出多的在前</option></select>
     </div>
     <div id="list"></div>`;
@@ -477,6 +484,7 @@ function renderHome(){
   $('#q').addEventListener('compositionend', e => { ui.q = e.target.value; renderList(); });
   $('#tag').onchange = e => { ui.tag = e.target.value; renderList(); };
   $('#month').onchange = e => { ui.month = e.target.value; renderList(); };
+  $('#plat').onchange = e => { ui.platform = e.target.value; renderList(); };
   $('#sort').onchange = e => { ui.sort = e.target.value; renderList(); };
   if ($('#exp')) $('#exp').onclick = () => { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(store.exportAll(),null,1)],{type:'application/json'})); a.download=`item-ledger-${today()}.json`; a.click(); };
   if ($('#imp')) $('#imp').onclick = () => { const i=document.createElement('input'); i.type='file'; i.accept='.json'; i.onchange=async()=>{ try{ const d=JSON.parse(await i.files[0].text()); if(!Array.isArray(d)) throw 0; if(!confirm(`匯入 ${d.length} 筆，會取代目前本機資料？`)) return; store.importAll(d); await reload(); renderHome(); }catch(e){ toast('檔案格式不對'); } }; i.click(); };
@@ -492,12 +500,12 @@ function renderList(){
     <div class="summary">
       <div class="tile"><div class="k">筆數 / 隻數</div><div class="v">${list.length} / ${nu}</div></div>
       <div class="tile"><div class="k">總成本</div><div class="v">${twd(tc)}</div></div>
-      <div class="tile"><div class="k">已賣出${tx?`（稅 ${twd(tx)}）`:''}</div><div class="v">${twd(ts)}</div></div>
+      <div class="tile"><div class="k">已賣出${tx?`（銷售稅 ${twd(tx)}）`:''}</div><div class="v">${twd(ts)}</div></div>
       <div class="tile gold"><div class="k">利潤</div><div class="v ${pf>=0?'pos':'neg'}">${twd(pf)}</div></div>
       <div class="tile"><div class="k">售出</div><div class="v">${ns} / ${nu}</div></div>
     </div>
     ${list.length ? `<div class="tbox"><div class="tablewrap"><table class="ledger">
-      <thead><tr><th>商品<br>縮圖</th><th>名稱</th><th>原價<br>(日幣)</th><th>實際<br>購買價</th><th>運費</th><th>手續費</th><th>折扣</th>
+      <thead><tr><th>商品<br>縮圖</th><th>名稱</th><th>原價<br>(日幣)</th><th>實際<br>購買價</th><th>運費</th><th>手續費</th><th>進貨<br>稅金</th><th>折扣</th>
         <th>總成本</th><th>每隻定價</th><th>總賣出價</th><th>利潤</th></tr></thead>
       <tbody>${list.map(rowHTML).join('')}</tbody></table></div></div>`
       : `<div class="empty-state">${items.length ? '沒有符合條件的紀錄' : '還沒有紀錄，按下方「新增記錄」開始'}</div>`}`;
@@ -518,16 +526,17 @@ function rowHTML(p){
   return `<tr data-id="${p.id}">
     <td>${img ? `<img class="thumb" src="${esc(img)}" alt="" loading="lazy">` : '<div class="thumb empty">無圖</div>'}</td>
     <td class="title-cell"><div class="t">${esc(p.title||'(未命名)')}</div>
-      <div class="meta">${esc(p.purchase_date)}${p.source_url ? ` · <a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>` : ''}</div>
+      <div class="meta">${esc(p.purchase_date)}${p.platform ? ` · <b class="plat">${esc(p.platform)}</b>` : ''}${p.source_url ? ` · <a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>` : ''}</div>
       <div>${(p.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div></td>
     <td class="num">${jpy(p.price_jpy)}</td>
     <td class="num">${twd(paid(p))}${p.paid_twd==null && p.rate ? `<span class="est">匯率 ${p.rate}</span>`:''}</td>
     <td class="num">${p.shipping ? twd(p.shipping) : '—'}</td>
     <td class="num">${p.fee ? twd(p.fee) : '—'}</td>
+    <td class="num">${p.buy_tax ? twd(p.buy_tax) : '—'}</td>
     <td class="num">${p.discount ? '−'+twd(p.discount) : '—'}</td>
     <td class="num"><b>${twd(c)}</b></td>
     <td><button class="unitbtn">${n} 隻 ▸</button><span class="est">${pr0}</span>${minis.length ? `<div class="minis">${minis.map(s=>`<img src="${esc(s)}" alt="" loading="lazy">`).join('')}</div>` : ''}</td>
-    <td class="num">${twd(st)}<span class="est">售出 ${ns}/${n}${tx?` · 稅 ${twd(tx)}`:''}</span></td>
+    <td class="num">${twd(st)}<span class="est">售出 ${ns}/${n}${tx?` · 銷售稅 ${twd(tx)}`:''}</span></td>
     <td class="num"><b class="${pr==null?'':pr>=0?'pos':'neg'}">${twd(pr)}</b>${n-ns>0 && est!=null ? `<span class="est">全賣完 ${twd(est)}</span>`:''}</td>
   </tr>`;
 }
@@ -552,7 +561,7 @@ function unitsHTML(units, al){
         <label class="f">定價<input data-k="list_price" type="number" inputmode="numeric" value="${u.list_price??''}"></label>
         ${saleOn ? `<div class="sec">${u.status==='sold'?'售出資訊':'預訂資訊'}</div>
         ${u.status==='sold' ? `<label class="f">賣出價<input data-k="sold_price" type="number" inputmode="numeric" value="${u.sold_price??''}"></label>
-        <label class="f">稅金（如有）<input data-k="tax" type="number" inputmode="numeric" value="${u.tax??''}" placeholder="0"></label>
+        <label class="f">銷售稅金（如有）<input data-k="tax" type="number" inputmode="numeric" value="${u.tax??''}" placeholder="0"></label>
         <label class="f">售出日期<input data-k="sold_date" type="date" value="${u.sold_date??''}"></label>
         <label class="f">售出位置<input data-k="sold_place" list="dl-place" value="${esc(u.sold_place||'')}" placeholder="蝦皮、社團、場販…"></label>` : ''}
         <label class="f">交易方式<input data-k="trade_method" list="dl-method" value="${esc(u.trade_method||'')}" placeholder="賣貨便、面交…"></label>
@@ -619,13 +628,13 @@ function openUnits(id){
   document.addEventListener('keydown', onKey);
   const head = () => {
     const st = units.reduce((s,u)=>s+(sold(u)?(+u.sold_price||0):0),0), tx = units.reduce((s,u)=>s+(sold(u)?(+u.tax||0):0),0);
-    return `${twd(cost(p))} 總成本 · 已賣 ${twd(st)}${tx?`（稅 ${twd(tx)}）`:''} · 利潤 <b class="${st-tx-(cost(p)||0)>=0?'pos':'neg'}">${twd(st-tx-(cost(p)||0))}</b>`;
+    return `${twd(cost(p))} 總成本 · 已賣 ${twd(st)}${tx?`（銷售稅 ${twd(tx)}）`:''} · 利潤 <b class="${st-tx-(cost(p)||0)>=0?'pos':'neg'}">${twd(st-tx-(cost(p)||0))}</b>`;
   };
   const draw = () => {
     bg.innerHTML = `<div class="modal">
       <div class="mh">${imgs[p.id] ? `<img src="${esc(imgs[p.id])}" id="zoomimg" alt="">` : ''}
         <div class="grow"><div class="mt">${esc(p.title||'(未命名)')}</div>
-          <div class="sub">${esc(p.purchase_date)}${p.source_url ? ` · <a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>`:''}</div>
+          <div class="sub">${esc(p.purchase_date)}${p.platform ? ` · ${esc(p.platform)}` : ''}${p.source_url ? ` · <a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>`:''}</div>
           <div style="margin-top:4px" id="mhsum">${head()}</div>
           <div class="sub" id="mhmode">${allocMode(units)}</div></div>
         <button class="x" id="close" aria-label="關閉">✕</button></div>
@@ -662,7 +671,8 @@ async function fetchRate(){
 function renderForm(edit){
   const isNew = !edit;
   const p = edit ? {...edit} : { id: uuid(), title:'', source_url:'', image_path:null, image_url:null, purchase_date: today(),
-    price_jpy:null, rate: +localStorage.getItem('ledger-last-rate') || CFG.defaultRate || .215, paid_twd:null, shipping:0, fee:0, discount:0, tags:[], note:'' };
+    price_jpy:null, rate: +localStorage.getItem('ledger-last-rate') || CFG.defaultRate || .215, paid_twd:null, shipping:0, fee:0, buy_tax:0, discount:0,
+    platform: localStorage.getItem('ledger-last-platform') || '', tags:[], note:'' };
   let units = (edit?.units?.length ? edit.units : [newUnit()]).map(u=>({...u}));
   let tags = [...(p.tags||[])];
   let imgBlob = null, mainSrc = edit ? imgs[edit.id] : null;
@@ -677,7 +687,9 @@ function renderForm(edit){
         <div class="row" style="margin-top:8px"><input id="imgurl" placeholder="或貼上圖片網址（不上傳，直接連結；這種圖無法裁切）" style="flex:1;padding:9px 10px;border:1px solid var(--line2);border-radius:9px;background:#fff" value="${esc(p.image_url||'')}">
           ${mainSrc ? '<button class="btn small danger" id="rmimg">移除主圖</button>' : ''}</div></div>
       <label class="f wide">商品名稱<input id="title" value="${esc(p.title)}" placeholder="例如：赤羽業 娃娃 3 隻組"></label>
-      <label class="f wide">原始購買網址<input id="source_url" type="url" value="${esc(p.source_url||'')}" placeholder="https://"></label>
+      <label class="f">購買平台<input id="platform" list="dl-plat" value="${esc(p.platform||'')}" placeholder="BNS、台灣煤爐…">
+        <datalist id="dl-plat">${platforms().map(v=>`<option value="${esc(v)}">`).join('')}</datalist></label>
+      <label class="f" style="grid-column:span 3">原始購買網址<input id="source_url" type="url" value="${esc(p.source_url||'')}" placeholder="https://"></label>
       <label class="f">購買日期<input id="purchase_date" type="date" value="${esc(p.purchase_date)}"></label>
       <label class="f">原價（日幣）<input id="price_jpy" type="number" inputmode="numeric" value="${p.price_jpy??''}"></label>
       <label class="f">匯率 JPY→TWD<span class="row" style="flex-wrap:nowrap"><input id="rate" type="number" step="0.0001" inputmode="decimal" value="${p.rate??''}" style="flex:1">
@@ -685,6 +697,7 @@ function renderForm(edit){
       <label class="f">實際購買價（台幣）<input id="paid_twd" type="number" inputmode="numeric" value="${p.paid_twd??''}" placeholder="留空 = 原價×匯率"></label>
       <label class="f">運費<input id="shipping" type="number" inputmode="numeric" value="${p.shipping??0}"></label>
       <label class="f">手續費<input id="fee" type="number" inputmode="numeric" value="${p.fee??0}"></label>
+      <label class="f">進貨稅金（如有）<input id="buy_tax" type="number" inputmode="numeric" value="${p.buy_tax??0}"></label>
       <label class="f">折扣（台幣）<input id="discount" type="number" inputmode="numeric" value="${p.discount??0}"></label>
       <label class="f wide">標籤<div class="tags-input" id="tagbox"><input id="taginput" list="taglist" placeholder="輸入後按 Enter"></div>
         <datalist id="taglist">${known.map(t=>`<option value="${esc(t)}">`).join('')}</datalist></label>
@@ -703,9 +716,9 @@ function renderForm(edit){
 
   const val = id => $('#'+id).value;
   const read = () => {
-    Object.assign(p, { title: val('title').trim(), source_url: val('source_url').trim() || null, purchase_date: val('purchase_date') || today(),
+    Object.assign(p, { title: val('title').trim(), platform: val('platform').trim() || null, source_url: val('source_url').trim() || null, purchase_date: val('purchase_date') || today(),
       price_jpy: num(val('price_jpy')), rate: num(val('rate')), paid_twd: num(val('paid_twd')),
-      shipping: num(val('shipping'))||0, fee: num(val('fee'))||0, discount: num(val('discount'))||0, note: val('note').trim() || null, tags });
+      shipping: num(val('shipping'))||0, fee: num(val('fee'))||0, buy_tax: num(val('buy_tax'))||0, discount: num(val('discount'))||0, note: val('note').trim() || null, tags });
     const u = val('imgurl').trim();
     if (u && !imgBlob) { if (u !== p.image_url && p.image_path) p._clearImage = true; p.image_url = u; }
     else if (!u && !imgBlob && !p.image_path) p.image_url = null;
@@ -718,7 +731,7 @@ function renderForm(edit){
       ['實際購買價', twd(paid(tmp))], ['總成本', twd(c), 1],
       ['每隻平均成本', units.length && c!=null ? twd(c/units.length) : '—'],
       ['定價合計', twd(units.reduce((s,u)=>s+(+u.list_price||0),0))],
-      ['已賣出', twd(soldTotal(tmp))], ['稅金', twd(taxTotal(tmp))], ['利潤', twd(profit(tmp)), 1], ['全賣完利潤', twd(expectProfit(tmp))]
+      ['已賣出', twd(soldTotal(tmp))], ['銷售稅金', twd(taxTotal(tmp))], ['利潤', twd(profit(tmp)), 1], ['全賣完利潤', twd(expectProfit(tmp))]
     ].map(([k,v,h])=>`<div class="${h?'hl':''}"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
     const al = alloc(tmp, units);
     $$('#unitwrap .ucard').forEach(card => { const i = +card.dataset.i, u = units[i];
@@ -766,6 +779,7 @@ function renderForm(edit){
     try {
       if (p._clearImage) await store.clearImage(p); delete p._clearImage;
       if (p.rate) localStorage.setItem('ledger-last-rate', p.rate);
+      if (p.platform) localStorage.setItem('ledger-last-platform', p.platform);
       const clean = units.filter(u => u.name || u.list_price != null || u.price_jpy != null || u.status !== 'stock' || u._blob || imgs[u.id]);
       await store.save(p, clean, imgBlob);
       await reload(); toast('已儲存'); location.hash = 'home';
@@ -806,6 +820,19 @@ function tagStats(start){
   });
   return [...t.values()].sort((a,b)=>b.cost-a.cost);
 }
+// 購買平台：依購買日期篩選期間
+function platformStats(start){
+  const t = new Map();
+  items.filter(p => monthKey(p.purchase_date) >= start).forEach(p => {
+    const name = p.platform || '（未填）';
+    const r = t.get(name) || { name, n:0, units:0, jpy:0, paid:0, extra:0, cost:0, sales:0, tax:0 };
+    const a = paid(p) || 0;
+    r.n++; r.units += (p.units||[]).length; r.jpy += +p.price_jpy||0; r.paid += a;
+    r.extra += (+p.shipping||0) + (+p.fee||0) + (+p.buy_tax||0) - (+p.discount||0);
+    r.cost += cost(p)||0; r.sales += soldTotal(p); r.tax += taxTotal(p); t.set(name, r);
+  });
+  return [...t.values()].sort((a,b)=>b.cost-a.cost);
+}
 // 售出位置／交易方式：依售出月份篩選期間；利潤用分攤成本算
 function channelStats(start, key){
   const t = new Map();
@@ -819,7 +846,7 @@ function channelStats(start, key){
 }
 function channelTable(rows, title){
   const max = Math.max(1, ...rows.map(r=>r.sales));
-  return `<div class="viz"><h3>${title}</h3><div class="tablewrap"><table class="plain"><thead><tr><th>${title}</th><th>隻數</th><th style="width:26%"></th><th>賣出</th><th>稅金</th><th>利潤</th></tr></thead>
+  return `<div class="viz"><h3>${title}</h3><div class="tablewrap"><table class="plain"><thead><tr><th>${title}</th><th>隻數</th><th style="width:26%"></th><th>賣出</th><th>銷售稅金</th><th>利潤</th></tr></thead>
     <tbody>${rows.length ? rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.n}</td><td><div class="bar jade" style="width:${(r.sales/max*100).toFixed(1)}%"></div></td>
       <td>${twd(r.sales)}</td><td>${r.tax?twd(r.tax):'—'}</td><td class="${r.sales-r.tax-r.cost>=0?'pos':'neg'}">${twd(r.sales-r.tax-r.cost)}</td></tr>`).join('') : '<tr><td colspan="6" class="sub">這段期間沒有售出</td></tr>'}</tbody></table></div></div>`;
 }
@@ -836,18 +863,18 @@ function renderStats(){
       <div class="seg" id="range">${[['6','近 6 月'],['12','近 12 月'],['year','今年'],['all','全部']].map(([k,v])=>`<button data-k="${k}" class="${ui.range===k?'on':''}">${v}</button>`).join('')}</div></div>
     <div class="summary">
       <div class="tile"><div class="k">期間總成本</div><div class="v">${twd(tc)}</div></div>
-      <div class="tile"><div class="k">期間賣出</div><div class="v">${twd(ts)}</div>${tx?`<div class="k">稅金 ${twd(tx)}</div>`:''}</div>
+      <div class="tile"><div class="k">期間賣出</div><div class="v">${twd(ts)}</div>${tx?`<div class="k">銷售稅金 ${twd(tx)}</div>`:''}</div>
       <div class="tile gold"><div class="k">期間淨額</div><div class="v ${ts-tx-tc>=0?'pos':'neg'}">${twd(ts-tx-tc)}</div></div>
       <div class="tile"><div class="k">目前庫存（全部）</div><div class="v">${stock} 隻</div><div class="k">分攤成本約 ${twd(stockVal)}</div></div>
     </div>
     <h2>每月成本統計</h2>
-    <div class="sub" style="margin-bottom:8px">成本算在購買月份；賣出和稅金算在售出日期的月份（沒填售出日就算購買月份）。淨額 = 賣出 − 稅金 − 成本。</div>
+    <div class="sub" style="margin-bottom:8px">成本（含進貨稅金）算在購買月份；賣出和銷售稅金算在售出日期的月份（沒填售出日就算購買月份）。淨額 = 賣出 − 銷售稅金 − 成本。</div>
     <div class="viz" id="viz">
       <div class="legend"><span><i style="background:var(--series-1)"></i>成本</span><span><i style="background:var(--series-2)"></i>賣出</span></div>
       <div id="chart"></div>
     </div>
     <details style="margin-top:8px"><summary class="sub" style="cursor:pointer">表格</summary>
-      <div class="viz tablewrap" style="margin-top:6px"><table class="plain"><thead><tr><th>月份</th><th>購買筆數</th><th>成本</th><th>賣出隻數</th><th>賣出</th><th>稅金</th><th>淨額</th></tr></thead>
+      <div class="viz tablewrap" style="margin-top:6px"><table class="plain"><thead><tr><th>月份</th><th>購買筆數</th><th>成本</th><th>賣出隻數</th><th>賣出</th><th>銷售稅金</th><th>淨額</th></tr></thead>
       <tbody>${rows.slice().reverse().map(r=>`<tr class="click" data-m="${r.k}"><td>${r.k}</td><td>${r.n}</td><td>${twd(r.cost)}</td><td>${r.sold}</td><td>${twd(r.sales)}</td><td>${r.tax?twd(r.tax):'—'}</td><td class="${r.sales-r.tax-r.cost>=0?'pos':'neg'}">${twd(r.sales-r.tax-r.cost)}</td></tr>`).join('')}</tbody></table></div></details>
 
     <h2>標籤統計</h2>
@@ -857,12 +884,20 @@ function renderStats(){
         <td><div class="bar" style="width:${(t.cost/maxTag*100).toFixed(1)}%"></div></td><td>${twd(t.cost)}</td><td>${twd(t.sales)}</td>
         <td class="${t.sales-t.tax-t.cost>=0?'pos':'neg'}">${twd(t.sales-t.tax-t.cost)}</td><td>${twd(t.expect-t.tax-t.cost)}</td></tr>`).join('') : '<tr><td colspan="8" class="sub">這段期間沒有資料</td></tr>'}</tbody></table></div>
 
+    <h2>購買平台</h2>
+    <div class="sub" style="margin-bottom:8px">依購買日期篩選期間。額外費用 = 運費 + 手續費 + 進貨稅金 − 折扣；費用比例 = 額外費用 ÷ 實際購買價，可以比較哪個平台買起來比較划算。點一列可在首頁篩選。</div>
+    <div class="viz tablewrap">${(() => { const ps = platformStats(start); const mx = Math.max(1, ...ps.map(r=>r.cost)); return `<table class="plain" style="min-width:720px"><thead><tr><th>平台</th><th>筆數</th><th>隻數</th><th style="width:16%"></th><th>總成本</th><th>實際購買價</th><th>額外費用</th><th>費用比例</th><th>已賣出</th><th>利潤</th></tr></thead>
+      <tbody>${ps.length ? ps.map(r=>`<tr class="click" data-plat="${esc(r.name)}"><td>${esc(r.name)}</td><td>${r.n}</td><td>${r.units}</td><td><div class="bar" style="width:${(r.cost/mx*100).toFixed(1)}%"></div></td>
+        <td>${twd(r.cost)}</td><td>${twd(r.paid)}</td><td>${twd(r.extra)}</td><td>${r.paid ? (r.extra/r.paid*100).toFixed(1)+'%' : '—'}</td><td>${twd(r.sales)}</td>
+        <td class="${r.sales-r.tax-r.cost>=0?'pos':'neg'}">${twd(r.sales-r.tax-r.cost)}</td></tr>`).join('') : '<tr><td colspan="10" class="sub">這段期間沒有資料</td></tr>'}</tbody></table>`; })()}</div>
+
     <h2>售出通路</h2>
-    <div class="sub" style="margin-bottom:8px">依售出日期篩選期間。利潤 = 賣出 − 稅金 − 該隻的分攤成本。</div>
+    <div class="sub" style="margin-bottom:8px">依售出日期篩選期間。利潤 = 賣出 − 銷售稅金 − 該隻的分攤成本。</div>
     <div class="two">${channelTable(channelStats(start,'sold_place'),'售出位置')}${channelTable(channelStats(start,'trade_method'),'交易方式')}</div>`;
   $$('#range button').forEach(b => b.onclick = () => { ui.range = b.dataset.k; renderStats(); });
   $$('tr[data-tag]').forEach(tr => tr.onclick = () => { ui.tag = tr.dataset.tag === '（無標籤）' ? '' : tr.dataset.tag; ui.month=''; location.hash='home'; });
-  $$('tr[data-m]').forEach(tr => tr.onclick = () => { ui.month = tr.dataset.m; ui.tag=''; location.hash='home'; });
+  $$('tr[data-m]').forEach(tr => tr.onclick = () => { ui.month = tr.dataset.m; ui.tag=''; ui.platform=''; location.hash='home'; });
+  $$('tr[data-plat]').forEach(tr => tr.onclick = () => { ui.platform = tr.dataset.plat; ui.tag=''; ui.month=''; location.hash='home'; });
   drawChart(rows);
   window.onresize = () => { if ((location.hash||'').startsWith('#stats')) drawChart(rows); };
 }
@@ -894,7 +929,7 @@ function drawChart(rows){
   $$('.hit', host).forEach(h => {
     h.onmouseenter = h.ontouchstart = () => {
       const r = rows[+h.dataset.i]; tip && tip.remove(); tip = document.createElement('div'); tip.className = 'tip';
-      tip.innerHTML = `<b>${r.k}</b><br>成本 ${twd(r.cost)}（${r.n} 筆）<br>賣出 ${twd(r.sales)}（${r.sold} 隻）${r.tax?`<br>稅金 ${twd(r.tax)}`:''}<br>淨額 ${twd(r.sales-r.tax-r.cost)}`;
+      tip.innerHTML = `<b>${r.k}</b><br>成本 ${twd(r.cost)}（${r.n} 筆）<br>賣出 ${twd(r.sales)}（${r.sold} 隻）${r.tax?`<br>銷售稅金 ${twd(r.tax)}`:''}<br>淨額 ${twd(r.sales-r.tax-r.cost)}`;
       const hb = h.getBoundingClientRect(), vb = viz.getBoundingClientRect();
       tip.style.left = Math.min(vb.width-80, Math.max(80, hb.left - vb.left + hb.width/2)) + 'px';
       tip.style.top = (y(Math.max(r.cost, r.sales)) + (host.getBoundingClientRect().top - vb.top) - 6) + 'px';

@@ -42,6 +42,10 @@ create table if not exists public.units (
   created_at  timestamptz not null default now()
 );
 
+-- v3：購買平台、進貨稅金
+alter table public.purchases add column if not exists platform text;                         -- BNS、台灣煤爐…
+alter table public.purchases add column if not exists buy_tax  numeric(12,0) not null default 0; -- 進貨稅金（計入總成本）
+
 -- v2：每一隻的圖片、售出資訊、稅金
 alter table public.units add column if not exists image_path   text;
 alter table public.units add column if not exists tax          numeric(12,0);
