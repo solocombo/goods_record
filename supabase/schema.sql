@@ -42,6 +42,10 @@ create table if not exists public.units (
   created_at  timestamptz not null default now()
 );
 
+-- v7：實際購買價（最終付款金額，手動填寫；空白 = 台幣定價＋運費＋手續費＋海關稅−折扣）
+--     paid_twd 欄位現在代表「台幣定價」
+alter table public.purchases add column if not exists final_twd numeric(12,0);
+
 -- v6：分帳（賣出後貨款先進帳戶，之後再分）
 alter table public.units add column if not exists settled      boolean not null default false;
 alter table public.units add column if not exists settled_date date;

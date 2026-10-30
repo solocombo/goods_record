@@ -78,9 +78,10 @@ table.ledger{border-collapse:separate;border-spacing:0 3px;min-width:1060px;widt
 .ledger td.num{text-align:right}
 .thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;display:block;background:#fff;border:1px solid var(--line)}
 .thumb.empty{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px}
-.title-cell{max-width:200px;white-space:normal;line-height:1.35}
-.title-cell .t{font-weight:600}
-.title-cell .meta{font-size:12px;color:var(--ink2)}
+.title-cell{width:220px;min-width:180px;max-width:240px;white-space:normal;line-height:1.4}
+.title-cell .t{font-weight:600;word-break:break-word}
+.title-cell .meta{font-size:12px;color:var(--ink2);display:flex;flex-wrap:wrap;column-gap:10px;row-gap:2px}
+.title-cell .meta .plat{font-size:12px}
 .plat{color:var(--walnut);font-weight:700}
 .unset{color:#b4472e;font-weight:600}
 .chk{display:flex;align-items:center;gap:6px;padding:9px 0;color:var(--ink);font-size:14px}
@@ -275,10 +276,12 @@ function errMsg(e){
 function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2200); }
 
 /* ---------- 計算 ---------- */
-// 實際購買價：有填用填的；沒填 = 原價 × 匯率
+// 台幣定價：有填用填的；沒填 = 原價 × 匯率（欄位名稱沿用 paid_twd）
 function paid(p){ return p.paid_twd != null ? +p.paid_twd : (p.price_jpy != null && p.rate != null ? Math.round(p.price_jpy * p.rate) : null); }
-// 總成本 = 實際購買價 + 運費 + 手續費 + 海關稅 − 折扣
-function cost(p){ const a = paid(p); if (a == null) return null; return a + (+p.shipping||0) + (+p.fee||0) + (+p.buy_tax||0) - (+p.discount||0); }
+// 自動計算的實際購買價 = 台幣定價 + 運費 + 手續費 + 海關稅 − 折扣
+function calcFinal(p){ const a = paid(p); if (a == null) return null; return a + (+p.shipping||0) + (+p.fee||0) + (+p.buy_tax||0) - (+p.discount||0); }
+// 實際購買價（＝總成本）：有手動填最終付款金額就用它，否則用自動計算
+function cost(p){ return p.final_twd != null ? +p.final_twd : calcFinal(p); }
 const sold = u => u.status === 'sold';
 function soldTotal(p){ return (p.units||[]).reduce((s,u)=> s + (sold(u) ? (+u.sold_price||0) : 0), 0); }
 function soldCount(p){ return (p.units||[]).filter(sold).length; }
@@ -579,8 +582,8 @@ function renderList(){
       <div class="tile"><div class="k">售出</div><div class="v">${ns} / ${nu}</div></div>
     </div>
     ${list.length ? `<div class="tbox"><div class="tablewrap"><table class="ledger">
-      <thead><tr><th>縮圖<br>／狀態</th><th>名稱</th><th>原價<br>(日幣)</th><th>實際<br>購買價</th><th>運費</th><th>手續費</th><th>海關稅</th><th>折扣</th>
-        <th>總成本</th><th>每隻定價</th><th>總賣出價</th><th>利潤</th></tr></thead>
+      <thead><tr><th>縮圖<br>／狀態</th><th>名稱</th><th>原價<br>(日幣)</th><th>台幣<br>定價</th><th>運費</th><th>手續費</th><th>海關稅</th><th>折扣</th>
+        <th>實際購買價<br>(總成本)</th><th>每隻定價</th><th>總賣出價</th><th>利潤</th></tr></thead>
       <tbody>${list.map(rowHTML).join('')}</tbody></table></div></div>`
       : `<div class="empty-state">${items.length ? '沒有符合條件的紀錄' : '還沒有紀錄，按下方「新增記錄」開始'}</div>`}`;
   $$('select.shipsel').forEach(sel => sel.onchange = async () => {
@@ -607,7 +610,8 @@ function rowHTML(p){
     <td>${img ? `<img class="thumb" src="${esc(img)}" alt="" loading="lazy">` : '<div class="thumb empty">無圖</div>'}
       <select class="shipsel" title="運送狀態">${['', ...SHIP].map(v=>`<option value="${v}" ${(p.ship_status||'')===v?'selected':''}>${v||'— 狀態 —'}</option>`).join('')}</select></td>
     <td class="title-cell"><div class="t">${esc(p.title||'(未命名)')}</div>
-      <div class="meta">${esc(p.purchase_date)}${p.platform ? ` · <b class="plat">${esc(p.platform)}</b>` : ''}${p.source_url ? ` · <a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>` : ''}${store.proofs(p).length ? ` · <button class="proofbtn" type="button">購買證明 ${store.proofs(p).length}</button>` : ''}</div>
+      <div class="meta">${esc(p.purchase_date)}${p.platform ? `<b class="plat">${esc(p.platform)}</b>` : ''}</div>
+      ${p.source_url || store.proofs(p).length ? `<div class="meta">${p.source_url ? `<a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>` : ''}${store.proofs(p).length ? `<button class="proofbtn" type="button">購買證明 ${store.proofs(p).length}</button>` : ''}</div>` : ''}
       <div>${(p.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div></td>
     <td class="num">${jpy(p.price_jpy)}</td>
     <td class="num">${twd(paid(p))}${p.paid_twd==null && p.rate ? `<span class="est">匯率 ${p.rate}</span>`:''}</td>
@@ -615,7 +619,7 @@ function rowHTML(p){
     <td class="num">${p.fee ? twd(p.fee) : '—'}</td>
     <td class="num">${p.buy_tax ? twd(p.buy_tax) : '—'}</td>
     <td class="num">${p.discount ? '−'+twd(p.discount) : '—'}</td>
-    <td class="num"><b>${twd(c)}</b></td>
+    <td class="num"><b>${twd(c)}</b>${p.final_twd != null && calcFinal(p) != null && Math.round(calcFinal(p)) !== Math.round(+p.final_twd) ? `<span class="est">手動填寫・計算 ${twd(calcFinal(p))}</span>` : ''}</td>
     <td><button class="unitbtn">${n} 隻 ▸</button><span class="est">${pr0}</span>${minis.length ? `<div class="minis">${minis.map(s=>`<img src="${esc(s)}" alt="" loading="lazy">`).join('')}</div>` : ''}</td>
     <td class="num">${twd(st)}<span class="est">售出 ${ns}/${n}${us?` · <span class="unset">未分帳 ${us}</span>`:''}</span></td>
     <td class="num"><b class="${pr==null?'':pr>=0?'pos':'neg'}">${twd(pr)}</b>${n-ns>0 && est!=null ? `<span class="est">全賣完 ${twd(est)}</span>`:''}</td>
@@ -769,7 +773,7 @@ async function fetchRate(){
 function renderForm(edit){
   const isNew = !edit;
   const p = edit ? {...edit} : { id: uuid(), title:'', source_url:'', image_path:null, image_url:null, purchase_date: today(),
-    price_jpy:null, rate: +localStorage.getItem('ledger-last-rate') || CFG.defaultRate || .215, paid_twd:null, shipping:0, fee:0, buy_tax:0, discount:0,
+    price_jpy:null, rate: +localStorage.getItem('ledger-last-rate') || CFG.defaultRate || .215, paid_twd:null, final_twd:null, shipping:0, fee:0, buy_tax:0, discount:0,
     platform: localStorage.getItem('ledger-last-platform') || '', tags:[], note:'' };
   let units = (edit?.units?.length ? edit.units : [newUnit()]).map(u=>({...u}));
   let tags = [...(p.tags||[])];
@@ -795,11 +799,12 @@ function renderForm(edit){
       <label class="f">原價（日幣）<input id="price_jpy" type="number" inputmode="numeric" value="${p.price_jpy??''}"></label>
       <label class="f">匯率 JPY→TWD<span class="row" style="flex-wrap:nowrap"><input id="rate" type="number" step="0.0001" inputmode="decimal" value="${p.rate??''}" style="flex:1">
         <button class="btn small" id="getrate" type="button">即時</button></span></label>
-      <label class="f">實際購買價（台幣）<input id="paid_twd" type="number" inputmode="numeric" value="${p.paid_twd??''}" placeholder="留空 = 原價×匯率"></label>
+      <label class="f">台幣定價<input id="paid_twd" type="number" inputmode="numeric" value="${p.paid_twd??''}" placeholder="留空 = 原價×匯率"></label>
       <label class="f">運費<input id="shipping" type="number" inputmode="numeric" value="${p.shipping??0}"></label>
       <label class="f">手續費<input id="fee" type="number" inputmode="numeric" value="${p.fee??0}"></label>
       <label class="f">海關稅（如有）<input id="buy_tax" type="number" inputmode="numeric" value="${p.buy_tax??0}"></label>
       <label class="f">折扣（台幣）<input id="discount" type="number" inputmode="numeric" value="${p.discount??0}"></label>
+      <label class="f">實際購買價（最終付款）<input id="final_twd" type="number" inputmode="numeric" value="${p.final_twd??''}" placeholder="留空 = 自動計算"></label>
       <label class="f wide">標籤<div class="tags-input" id="tagbox"><input id="taginput" list="taglist" placeholder="輸入後按 Enter"></div>
         <datalist id="taglist">${known.map(t=>`<option value="${esc(t)}">`).join('')}</datalist></label>
       <label class="f wide">備註<textarea id="note">${esc(p.note||'')}</textarea></label>
@@ -820,7 +825,7 @@ function renderForm(edit){
   const val = id => $('#'+id).value;
   const read = () => {
     Object.assign(p, { ship_status: ($('#shippick input:checked')||{}).value || null, title: val('title').trim(), platform: val('platform').trim() || null, source_url: val('source_url').trim() || null, purchase_date: val('purchase_date') || today(),
-      price_jpy: num(val('price_jpy')), rate: num(val('rate')), paid_twd: num(val('paid_twd')),
+      price_jpy: num(val('price_jpy')), rate: num(val('rate')), paid_twd: num(val('paid_twd')), final_twd: num(val('final_twd')),
       shipping: num(val('shipping'))||0, fee: num(val('fee'))||0, buy_tax: num(val('buy_tax'))||0, discount: num(val('discount'))||0, note: val('note').trim() || null, tags });
     const u = val('imgurl').trim();
     if (u && !imgBlob) { if (u !== p.image_url && p.image_path) p._clearImage = true; p.image_url = u; }
@@ -831,7 +836,7 @@ function renderForm(edit){
     const tmp = {...p, units};
     const c = cost(tmp);
     $('#calc').innerHTML = [
-      ['實際購買價', twd(paid(tmp))], ['總成本', twd(c), 1],
+      ['台幣定價', twd(paid(tmp))], ['實際購買價（總成本）', twd(c), 1],
       ['每隻平均成本', units.length && c!=null ? twd(c/units.length) : '—'],
       ['定價合計', twd(units.reduce((s,u)=>s+(+u.list_price||0),0))],
       ['已賣出', twd(soldTotal(tmp))], ['利潤', twd(profit(tmp)), 1], ['全賣完利潤', twd(expectProfit(tmp))]
@@ -841,6 +846,7 @@ function renderForm(edit){
       const a = $('[data-alloc]', card); if (a) a.textContent = al[i]==null ? '—' : twd(al[i]);
       const up = $('[data-uprofit]', card); if (up) up.textContent = al[i]==null||u.sold_price==null ? '—' : twd(u.sold_price-al[i]); });
     $('#amode').textContent = '分攤成本：' + allocMode(units);
+    const cf = calcFinal(tmp); $('#final_twd').placeholder = cf == null ? '留空 = 自動計算' : `留空 = 自動 ${twd(cf)}`;
   };
   const drawUnits = () => {
     const w = $('#unitwrap'); w.innerHTML = unitsHTML(units, alloc({...p, units}, units));
@@ -950,7 +956,7 @@ function platformStats(start){
     const r = t.get(name) || { name, n:0, units:0, jpy:0, paid:0, extra:0, cost:0, sales:0 };
     const a = paid(p) || 0;
     r.n++; r.units += (p.units||[]).length; r.jpy += +p.price_jpy||0; r.paid += a;
-    r.extra += (+p.shipping||0) + (+p.fee||0) + (+p.buy_tax||0) - (+p.discount||0);
+    r.extra += (cost(p)||0) - a;
     r.cost += cost(p)||0; r.sales += soldTotal(p); t.set(name, r);
   });
   return [...t.values()].sort((a,b)=>b.cost-a.cost);
@@ -1050,8 +1056,8 @@ function renderStats(){
         <td class="${t.sales-t.cost>=0?'pos':'neg'}">${twd(t.sales-t.cost)}</td><td>${twd(t.expect-t.cost)}</td></tr>`).join('') : '<tr><td colspan="8" class="sub">這段期間沒有資料</td></tr>'}</tbody></table></div>
 
     <h2>購買平台</h2>
-    <div class="sub" style="margin-bottom:8px">依購買日期篩選期間。額外費用 = 運費 + 手續費 + 海關稅 − 折扣；費用比例 = 額外費用 ÷ 實際購買價，可以比較哪個平台買起來比較划算。點一列可在首頁篩選。</div>
-    <div class="viz tablewrap">${(() => { const ps = platformStats(start); const mx = Math.max(1, ...ps.map(r=>r.cost)); return `<table class="plain" style="min-width:720px"><thead><tr><th>平台</th><th>筆數</th><th>隻數</th><th style="width:16%"></th><th>總成本</th><th>實際購買價</th><th>額外費用</th><th>費用比例</th><th>已賣出</th><th>利潤</th></tr></thead>
+    <div class="sub" style="margin-bottom:8px">依購買日期篩選期間。額外費用 = 實際購買價 − 台幣定價（運費＋手續費＋海關稅−折扣）；費用比例 = 額外費用 ÷ 台幣定價，可以比較哪個平台買起來比較划算。點一列可在首頁篩選。</div>
+    <div class="viz tablewrap">${(() => { const ps = platformStats(start); const mx = Math.max(1, ...ps.map(r=>r.cost)); return `<table class="plain" style="min-width:720px"><thead><tr><th>平台</th><th>筆數</th><th>隻數</th><th style="width:16%"></th><th>實際購買價</th><th>台幣定價</th><th>額外費用</th><th>費用比例</th><th>已賣出</th><th>利潤</th></tr></thead>
       <tbody>${ps.length ? ps.map(r=>`<tr class="click" data-plat="${esc(r.name)}"><td>${esc(r.name)}</td><td>${r.n}</td><td>${r.units}</td><td><div class="bar" style="width:${(r.cost/mx*100).toFixed(1)}%"></div></td>
         <td>${twd(r.cost)}</td><td>${twd(r.paid)}</td><td>${twd(r.extra)}</td><td>${r.paid ? (r.extra/r.paid*100).toFixed(1)+'%' : '—'}</td><td>${twd(r.sales)}</td>
         <td class="${r.sales-r.cost>=0?'pos':'neg'}">${twd(r.sales-r.cost)}</td></tr>`).join('') : '<tr><td colspan="10" class="sub">這段期間沒有資料</td></tr>'}</tbody></table>`; })()}</div>
