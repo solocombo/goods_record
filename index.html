@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>商品紀錄</title>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+:root{
+  --head:#175d80; --head-ink:#fff;
+  --row1:#d0d5dc; --row2:#e6e9ed;
+  --bg:#f6f7f8; --card:#fff; --ink:#1b1d20; --ink2:#52575e; --muted:#868b92;
+  --line:#d9dde2; --accent:#175d80; --good:#16794a; --bad:#c23a3a;
+  --series-1:#2a78d6; --series-2:#eb6834;
+  --radius:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;font-size:15px}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+.hidden{display:none!important}
+main{max-width:1200px;margin:0 auto;padding:16px 14px 96px}
+h1{font-size:20px;margin:4px 0 14px}
+h2{font-size:17px;margin:22px 0 10px}
+.sub{color:var(--muted);font-size:13px}
+
+/* bottom nav */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;
+  background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:20}
+nav.tabs a{flex:0 1 160px;text-align:center;padding:14px 4px;text-decoration:none;color:var(--ink2);
+  border-left:1px solid var(--line)}
+nav.tabs a:last-child{border-right:1px solid var(--line)}
+nav.tabs a.on{color:var(--accent);font-weight:700;box-shadow:inset 0 3px 0 var(--accent)}
+
+/* toolbar */
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.toolbar input,.toolbar select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card)}
+.toolbar input[type=search]{flex:1 1 200px}
+.summary{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px;min-width:130px}
+@media(max-width:600px){.summary{gap:6px}.tile{min-width:0;flex:1 1 30%;padding:8px 10px}.tile .v{font-size:16px}}
+.tile .k{font-size:12px;color:var(--muted)}
+.tile .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+
+/* main table */
+.tablewrap{overflow-x:auto;border-radius:6px;-webkit-overflow-scrolling:touch}
+table.ledger{border-collapse:separate;border-spacing:2px;min-width:980px;width:100%}
+.ledger th{background:var(--head);color:var(--head-ink);text-align:left;vertical-align:top;
+  padding:8px;font-weight:700;font-size:14px;line-height:1.3;white-space:nowrap}
+.ledger td{padding:6px 8px;font-variant-numeric:tabular-nums;white-space:nowrap;vertical-align:middle}
+.ledger tbody tr:nth-child(odd) td{background:var(--row1)}
+.ledger tbody tr:nth-child(even) td{background:var(--row2)}
+.ledger tbody tr{cursor:pointer}
+.ledger tbody tr:hover td{filter:brightness(1.04)}
+.ledger td.num{text-align:right}
+.thumb{width:64px;height:64px;border-radius:6px;object-fit:cover;display:block;background:#fff}
+.thumb.empty{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px}
+.title-cell{max-width:220px;white-space:normal;line-height:1.35}
+.title-cell .t{font-weight:600}
+.title-cell .meta{font-size:12px;color:var(--ink2)}
+.chip{display:inline-block;background:rgba(23,93,128,.12);color:var(--accent);border-radius:99px;padding:1px 8px;font-size:12px;margin:2px 3px 0 0}
+.unitbtn{border:1px solid var(--accent);background:#fff;color:var(--accent);border-radius:99px;padding:4px 10px;cursor:pointer}
+.pos{color:var(--good)} .neg{color:var(--bad)}
+.est{display:block;font-size:11px;color:var(--ink2)}
+.empty-state{padding:40px 10px;text-align:center;color:var(--muted)}
+
+/* forms */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink2)}
+label.f input,label.f select,label.f textarea{padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font-size:15px}
+label.f textarea{min-height:60px;resize:vertical}
+.wide{grid-column:1/-1}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:9px 14px;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.btn.danger{color:var(--bad);border-color:#e6b8b8}
+.btn.small{padding:5px 10px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:default}
+.imgbox{border:2px dashed var(--line);border-radius:var(--radius);min-height:160px;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:8px;padding:10px;text-align:center;color:var(--muted);cursor:pointer;background:#fafbfc}
+.imgbox img{max-width:100%;max-height:340px;border-radius:6px}
+.imgbox.drag{border-color:var(--accent);background:#eef5f9}
+.calc{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:12px}
+.calc div{background:#f1f4f6;border-radius:8px;padding:8px 10px}
+.calc .k{font-size:12px;color:var(--muted)} .calc .v{font-weight:700;font-variant-numeric:tabular-nums}
+.tags-input{display:flex;flex-wrap:wrap;gap:4px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:5px 6px;background:#fff}
+.tags-input input,label.f .tags-input input{border:0;outline:0;background:none;flex:1 1 100px;padding:4px;min-width:80px}
+.tags-input .chip{cursor:pointer}
+.tags-input .chip::after{content:" ×"}
+table.units{width:100%;border-collapse:collapse;min-width:640px}
+.units th{font-size:12px;color:var(--muted);text-align:left;font-weight:600;padding:4px}
+.units td{padding:3px 4px}
+.units select{min-width:92px}
+.units input,.units select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;font-variant-numeric:tabular-nums}
+.units td.alloc{color:var(--ink2);font-size:13px;white-space:nowrap;text-align:right}
+.x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:18px;padding:2px 6px}
+
+/* modal */
+.modal-bg{position:fixed;inset:0;background:rgba(10,20,30,.45);display:flex;align-items:flex-end;justify-content:center;z-index:50}
+.modal{background:var(--card);width:min(860px,100%);max-height:92vh;overflow:auto;border-radius:14px 14px 0 0;padding:16px}
+@media(min-width:700px){.modal-bg{align-items:center}.modal{border-radius:14px}}
+.modal header{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px}
+.modal header img{width:84px;height:84px;object-fit:cover;border-radius:8px;cursor:zoom-in}
+.modal header .grow{flex:1}
+
+/* stats */
+.viz{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;position:relative}
+.legend{display:flex;gap:14px;font-size:13px;color:var(--ink2);margin-bottom:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.tip{position:absolute;pointer-events:none;background:#1b1d20;color:#fff;font-size:12px;border-radius:6px;padding:6px 9px;
+  white-space:nowrap;transform:translate(-50%,-100%);font-variant-numeric:tabular-nums;z-index:5}
+table.plain{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.plain th,.plain td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.plain th:first-child,.plain td:first-child{text-align:left}
+.plain th{font-size:12px;color:var(--muted);font-weight:600}
+.plain tr.click{cursor:pointer} .plain tr.click:hover td{background:#f1f4f6}
+.bar{height:8px;border-radius:0 4px 4px 0;background:var(--series-1);min-width:2px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:7px 12px;cursor:pointer;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--accent);color:#fff}
+.banner{background:#fff6dd;border:1px solid #f0d78c;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px}
+.toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:#1b1d20;color:#fff;padding:9px 16px;border-radius:99px;z-index:99;font-size:14px}
+.login{max-width:360px;margin:12vh auto}
+.zoom{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:80;cursor:zoom-out}
+.zoom img{max-width:96vw;max-height:96vh}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<nav class="tabs hidden" id="tabs">
+  <a href="#stats" data-v="stats">統計</a>
+  <a href="#home" data-v="home">首頁</a>
+  <a href="#new" data-v="new">新增記錄</a>
+</nav>
+<script>
+(function(){
+'use strict';
+const CFG = window.LEDGER_CONFIG || {};
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
+const twd = v => v == null ? '—' : (v < 0 ? '−' : '') + 'NT$' + Math.round(Math.abs(v)).toLocaleString('zh-TW');
+const jpy = v => v == null ? '—' : '¥' + Math.round(v).toLocaleString('ja-JP');
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c=='x'?r:(r&3|8)).toString(16)}));
+const STATUS = {stock:'在庫', reserved:'已預訂', sold:'已售出'};
+function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2200); }
+
+/* ---------- 計算 ---------- */
+function paid(p){ return p.paid_twd != null ? +p.paid_twd : (p.price_jpy != null && p.rate != null ? Math.round(p.price_jpy * p.rate) : null); }
+function cost(p){ const a = paid(p); if (a == null) return null; return a + (+p.shipping||0) + (+p.fee||0) - (+p.discount||0); }
+function soldTotal(p){ return (p.units||[]).reduce((s,u)=> s + (u.status==='sold' ? (+u.sold_price||0) : 0), 0); }
+function soldCount(p){ return (p.units||[]).filter(u=>u.status==='sold').length; }
+function expectTotal(p){ return (p.units||[]).reduce((s,u)=> s + (u.status==='sold' ? (+u.sold_price||0) : (+u.list_price||0)), 0); }
+function profit(p){ const c = cost(p); return c == null ? null : soldTotal(p) - c; }
+// 每隻分攤成本：每隻都有日幣價就照日幣價比例，否則平均
+function alloc(p, units){
+  units = units || p.units || []; const c = cost(p);
+  if (c == null || !units.length) return units.map(()=>null);
+  const all = units.every(u => +u.price_jpy > 0);
+  const w = units.map(u => all ? +u.price_jpy : 1); const W = w.reduce((a,b)=>a+b,0);
+  return w.map(x => c * x / W);
+}
+
+/* ---------- 圖片壓縮 ---------- */
+async function compress(file, maxSide, q){
+  const url = URL.createObjectURL(file);
+  try{
+    const img = await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; });
+    const s = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth*s); c.height = Math.round(img.naturalHeight*s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise(r => c.toBlob(r, 'image/webp', q));
+    if (blob && blob.type === 'image/webp') return blob;
+    return await new Promise(r => c.toBlob(r, 'image/jpeg', q));
+  } finally { URL.revokeObjectURL(url); }
+}
+const blobToDataURL = b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); });
+
+/* ---------- 資料層：本機 ---------- */
+const LocalStore = {
+  mode: 'local', KEY: 'item-ledger-v1',
+  _read(){ try { return JSON.parse(localStorage.getItem(this.KEY)) || null; } catch(e){ return null; } },
+  _write(d){ try { localStorage.setItem(this.KEY, JSON.stringify(d)); } catch(e){ toast('本機空間不足，請刪掉部分圖片或改用 Supabase'); throw e; } },
+  async init(){ if (!this._read()) this._write(demoData()); return true; },
+  async list(){ return this._read(); },
+  async save(p, units, imgBlob){
+    const d = this._read(); p = {...p};
+    if (imgBlob) { p.image_data = await blobToDataURL(await compress(imgBlob, 640, .72)); p.image_url = null; }
+    p.units = units.map((u,i)=>({...u, purchase_id:p.id, sort:i}));
+    p.updated_at = new Date().toISOString();
+    const i = d.findIndex(x=>x.id===p.id); if (i>=0) d[i] = {...d[i], ...p}; else d.unshift({...p, created_at:p.updated_at});
+    this._write(d); return p;
+  },
+  async saveUnits(pid, units){ const d=this._read(); const p=d.find(x=>x.id===pid); p.units=units.map((u,i)=>({...u,purchase_id:pid,sort:i})); this._write(d); },
+  async remove(id){ this._write(this._read().filter(x=>x.id!==id)); },
+  async imageUrls(list){ const m={}; list.forEach(p=>{ m[p.id] = p.image_data || p.image_url || null; }); return m; },
+  async clearImage(p){ p.image_data = null; },
+  exportAll(){ return this._read(); },
+  importAll(d){ this._write(d); }
+};
+
+/* ---------- 資料層：Supabase ---------- */
+const SupaStore = {
+  mode: 'supabase', sb: null, urlCache: {},
+  async init(){
+    this.sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
+    const { data } = await this.sb.auth.getSession(); return !!data.session;
+  },
+  async login(email, pw){ const { error } = await this.sb.auth.signInWithPassword({ email, password: pw }); if (error) throw error; },
+  async logout(){ await this.sb.auth.signOut(); },
+  async list(){
+    const { data, error } = await this.sb.from('purchases').select('*, units(*)').order('purchase_date', {ascending:false}).order('created_at', {ascending:false});
+    if (error) throw error;
+    data.forEach(p => p.units.sort((a,b)=>a.sort-b.sort)); return data;
+  },
+  async save(p, units, imgBlob){
+    p = {...p}; delete p.units; delete p.image_data;
+    let oldPath = null;
+    if (imgBlob) {
+      const blob = await compress(imgBlob, 1400, .85);
+      const ext = blob.type === 'image/webp' ? 'webp' : 'jpg';
+      const path = `${p.purchase_date.slice(0,7)}/${p.id}-${Date.now().toString(36)}.${ext}`;
+      const { error } = await this.sb.storage.from('item-photos').upload(path, blob, { contentType: blob.type });
+      if (error) throw error;
+      oldPath = p.image_path; p.image_path = path; p.image_url = null;
+    }
+    const { error: e1 } = await this.sb.from('purchases').upsert(p); if (e1) throw e1;
+    await this.saveUnits(p.id, units);
+    if (oldPath) this.sb.storage.from('item-photos').remove([oldPath]);
+    return p;
+  },
+  async saveUnits(pid, units){
+    const rows = units.map((u,i)=>({ id:u.id, purchase_id:pid, sort:i, name:u.name||'', price_jpy:num(u.price_jpy), list_price:num(u.list_price),
+      status:u.status||'stock', sold_price:num(u.sold_price), sold_date:u.sold_date||null, buyer:u.buyer||null }));
+    const keep = rows.map(r=>r.id);
+    let q = this.sb.from('units').delete().eq('purchase_id', pid);
+    if (keep.length) q = q.not('id', 'in', `(${keep.join(',')})`);
+    const { error: e0 } = await q; if (e0) throw e0;
+    if (rows.length) { const { error } = await this.sb.from('units').upsert(rows); if (error) throw error; }
+  },
+  async remove(id){
+    const { data } = await this.sb.from('purchases').select('image_path').eq('id', id).single();
+    const { error } = await this.sb.from('purchases').delete().eq('id', id); if (error) throw error;
+    if (data && data.image_path) this.sb.storage.from('item-photos').remove([data.image_path]);
+  },
+  async imageUrls(list){
+    const m = {}, need = [], now = Date.now();
+    list.forEach(p => {
+      if (p.image_path) { const c = this.urlCache[p.image_path]; if (c && c.exp > now) m[p.id] = c.url; else need.push(p); }
+      else m[p.id] = p.image_url || null;
+    });
+    if (need.length) {
+      const { data } = await this.sb.storage.from('item-photos').createSignedUrls(need.map(p=>p.image_path), 3600);
+      (data||[]).forEach((r,i) => { if (r.signedUrl) { this.urlCache[need[i].image_path] = { url:r.signedUrl, exp: now + 3300e3 }; m[need[i].id] = r.signedUrl; } });
+    }
+    return m;
+  },
+  async clearImage(p){ if (p.image_path) { await this.sb.storage.from('item-photos').remove([p.image_path]); } p.image_path = null; }
+};
+
+function demoData(){
+  const ym = (k) => { const d = new Date(); d.setMonth(d.getMonth()-k); return d.toISOString().slice(0,7); };
+  const mk = (k, day, title, tags, jp, rate, ship, fee, disc, units) => ({ id: uuid(), title, source_url:'https://jp.mercari.com/', image_url:null,
+    purchase_date: `${ym(k)}-${day}`, price_jpy: jp, rate, paid_twd: null, shipping: ship, fee, discount: disc, tags, note:'範例資料',
+    units: units.map((u,i)=>({ id:uuid(), sort:i, name:u[0], price_jpy:u[1], list_price:u[2], status:u[3], sold_price:u[4]??null, sold_date: u[3]==='sold' ? `${ym(Math.max(0,k-1))}-15` : null })) });
+  return [
+    mk(0,'05','暗殺教室 赤羽業 娃娃 3 隻組',['暗殺教室','娃娃'],5400,.212,180,30,0,[['業 A',1800,520,'sold',520],['業 B',1800,520,'reserved'],['渚',1800,480,'stock']]),
+    mk(1,'12','ぬい 2 隻＋徽章',['娃娃','徽章'],3800,.214,150,0,50,[['娃娃 1',1500,420,'sold',450],['娃娃 2',1500,420,'sold',420],['徽章',800,220,'stock']]),
+    mk(2,'20','壓克力立牌',['立牌'],2200,.216,90,30,0,[['立牌',2200,560,'sold',560]]),
+    mk(3,'03','福袋 5 隻',['娃娃','福袋'],9000,.218,260,60,100,[['1',null,480,'sold',480],['2',null,480,'sold',500],['3',null,480,'sold',480],['4',null,480,'stock'],['5',null,480,'stock']])
+  ];
+}
+
+/* ---------- 狀態 ---------- */
+let store = null, items = [], imgs = {};
+const ui = { q:'', tag:'', month:'', range:'12', sort:'date' };
+
+async function reload(){ items = await store.list(); imgs = await store.imageUrls(items); }
+function allTags(){ const s = new Map(); items.forEach(p => (p.tags||[]).forEach(t => s.set(t, (s.get(t)||0)+1))); return [...s.entries()].sort((a,b)=>b[1]-a[1]).map(x=>x[0]); }
+
+/* ---------- 路由 ---------- */
+async function route(){
+  const h = location.hash.slice(1) || 'home';
+  const [view, arg] = h.split('/');
+  $$('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.v === (view==='edit'?'new':view)));
+  window.scrollTo(0,0);
+  if (view === 'stats') renderStats();
+  else if (view === 'new') renderForm(null);
+  else if (view === 'edit') renderForm(items.find(p=>p.id===arg) || null);
+  else renderHome();
+}
+
+/* ---------- 首頁 ---------- */
+function filtered(){
+  const q = ui.q.trim().toLowerCase();
+  let list = items.filter(p => {
+    if (ui.tag && !(p.tags||[]).includes(ui.tag)) return false;
+    if (ui.month && !String(p.purchase_date).startsWith(ui.month)) return false;
+    if (q) { const hay = [p.title, p.note, p.source_url, ...(p.tags||[]), ...(p.units||[]).map(u=>u.name+' '+(u.buyer||''))].join(' ').toLowerCase(); if (!hay.includes(q)) return false; }
+    return true;
+  });
+  const by = { date: (a,b) => String(b.purchase_date).localeCompare(String(a.purchase_date)),
+    profit: (a,b) => (profit(b)??-1e12) - (profit(a)??-1e12), cost: (a,b) => (cost(b)??0) - (cost(a)??0),
+    unsold: (a,b) => ((b.units||[]).length - soldCount(b)) - ((a.units||[]).length - soldCount(a)) };
+  return list.sort(by[ui.sort] || by.date);
+}
+
+function renderHome(){
+  const tags = allTags();
+  const months = [...new Set(items.map(p => String(p.purchase_date).slice(0,7)))].sort().reverse();
+  $('#app').innerHTML = `
+    ${store.mode==='local' ? `<div class="banner">本機模式：資料只存在這台裝置的瀏覽器。在 config.js 填入 Supabase 設定即可改用雲端。
+      <button class="btn small" id="exp">匯出 JSON</button> <button class="btn small" id="imp">匯入 JSON</button></div>` : ''}
+    <div class="row" style="justify-content:space-between"><h1>目前的紀錄</h1>
+      ${store.mode==='supabase' ? '<button class="btn small" id="logout">登出</button>' : ''}</div>
+    <div class="toolbar">
+      <input type="search" id="q" placeholder="搜尋名稱、標籤、買家…" value="${esc(ui.q)}">
+      <select id="tag"><option value="">全部標籤</option>${tags.map(t=>`<option ${t===ui.tag?'selected':''}>${esc(t)}</option>`).join('')}</select>
+      <select id="month"><option value="">全部月份</option>${months.map(m=>`<option ${m===ui.month?'selected':''}>${m}</option>`).join('')}</select>
+      <select id="sort">
+        <option value="date">依購買日</option><option value="profit">依利潤</option><option value="cost">依成本</option><option value="unsold">未售出多的在前</option>
+      </select>
+    </div>
+    <div id="list"></div>`;
+  $('#sort').value = ui.sort;
+  $('#q').oninput = e => { ui.q = e.target.value; if (!e.isComposing) renderList(); };
+  $('#q').addEventListener('compositionend', e => { ui.q = e.target.value; renderList(); });
+  $('#tag').onchange = e => { ui.tag = e.target.value; renderList(); };
+  $('#month').onchange = e => { ui.month = e.target.value; renderList(); };
+  $('#sort').onchange = e => { ui.sort = e.target.value; renderList(); };
+  if ($('#logout')) $('#logout').onclick = async () => { await store.logout(); location.reload(); };
+  if ($('#exp')) $('#exp').onclick = () => { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(store.exportAll(),null,1)],{type:'application/json'})); a.download=`item-ledger-${today()}.json`; a.click(); };
+  if ($('#imp')) $('#imp').onclick = () => { const i=document.createElement('input'); i.type='file'; i.accept='.json'; i.onchange=async()=>{ try{ const d=JSON.parse(await i.files[0].text()); if(!Array.isArray(d)) throw 0; if(!confirm(`匯入 ${d.length} 筆，會取代目前本機資料？`)) return; store.importAll(d); await reload(); renderHome(); }catch(e){ toast('檔案格式不對'); } }; i.click(); };
+  renderList();
+}
+
+function renderList(){
+  const list = filtered();
+  const tc = list.reduce((s,p)=>s+(cost(p)||0),0), ts = list.reduce((s,p)=>s+soldTotal(p),0);
+  const nu = list.reduce((s,p)=>s+(p.units||[]).length,0), ns = list.reduce((s,p)=>s+soldCount(p),0);
+  $('#list').innerHTML = `
+    <div class="summary">
+      <div class="tile"><div class="k">筆數 / 隻數</div><div class="v">${list.length} / ${nu}</div></div>
+      <div class="tile"><div class="k">總成本</div><div class="v">${twd(tc)}</div></div>
+      <div class="tile"><div class="k">已賣出</div><div class="v">${twd(ts)}</div></div>
+      <div class="tile"><div class="k">利潤</div><div class="v ${ts-tc>=0?'pos':'neg'}">${twd(ts-tc)}</div></div>
+      <div class="tile"><div class="k">售出</div><div class="v">${ns} / ${nu}</div></div>
+    </div>
+    ${list.length ? `<div class="tablewrap"><table class="ledger">
+      <thead><tr><th>商品<br>縮圖</th><th>名稱</th><th>原價<br>(日幣)</th><th>實際<br>購買價</th><th>運費</th><th>手續費</th><th>折扣</th>
+        <th>總成本</th><th>每隻定價</th><th>總賣出價</th><th>利潤</th></tr></thead>
+      <tbody>${list.map(rowHTML).join('')}</tbody></table></div>`
+      : `<div class="empty-state">${items.length ? '沒有符合條件的紀錄' : '還沒有紀錄，按下方「新增記錄」開始'}</div>`}`;
+  $$('.ledger tbody tr').forEach(tr => tr.onclick = e => {
+    if (e.target.closest('.unitbtn')) { openUnits(tr.dataset.id); return; }
+    if (e.target.closest('a')) return;
+    location.hash = 'edit/' + tr.dataset.id;
+  });
+}
+
+function rowHTML(p){
+  const c = cost(p), st = soldTotal(p), pr = profit(p), n = (p.units||[]).length, ns = soldCount(p);
+  const left = n - ns, est = c == null ? null : expectTotal(p) - c;
+  const prices = (p.units||[]).map(u=>+u.list_price).filter(x=>x>0);
+  const pr0 = prices.length ? (Math.min(...prices)===Math.max(...prices) ? twd(prices[0]) : `${twd(Math.min(...prices))}–${Math.max(...prices).toLocaleString()}`) : '';
+  const img = imgs[p.id];
+  return `<tr data-id="${p.id}">
+    <td>${img ? `<img class="thumb" src="${esc(img)}" alt="" loading="lazy">` : '<div class="thumb empty">無圖</div>'}</td>
+    <td class="title-cell"><div class="t">${esc(p.title||'(未命名)')}</div>
+      <div class="meta">${esc(p.purchase_date)}${p.source_url ? ` · <a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>` : ''}</div>
+      <div>${(p.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div></td>
+    <td class="num">${jpy(p.price_jpy)}</td>
+    <td class="num">${twd(paid(p))}${p.paid_twd==null && p.rate ? `<span class="est">匯率 ${p.rate}</span>`:''}</td>
+    <td class="num">${p.shipping ? twd(p.shipping) : '—'}</td>
+    <td class="num">${p.fee ? twd(p.fee) : '—'}</td>
+    <td class="num">${p.discount ? '−'+twd(p.discount) : '—'}</td>
+    <td class="num"><b>${twd(c)}</b></td>
+    <td><button class="unitbtn">${n} 隻 ▸</button><span class="est">${pr0}</span></td>
+    <td class="num">${twd(st)}<span class="est">售出 ${ns}/${n}</span></td>
+    <td class="num"><b class="${pr==null?'':pr>=0?'pos':'neg'}">${twd(pr)}</b>${left>0 && est!=null ? `<span class="est">全賣完 ${twd(est)}</span>`:''}</td>
+  </tr>`;
+}
+
+/* ---------- 每隻定價小視窗 ---------- */
+function openUnits(id){
+  const p = items.find(x=>x.id===id); if (!p) return;
+  let units = (p.units||[]).map(u=>({...u}));
+  const bg = document.createElement('div'); bg.className = 'modal-bg';
+  const draw = () => {
+    const al = alloc(p, units);
+    const st = units.reduce((s,u)=>s+(u.status==='sold'?(+u.sold_price||0):0),0);
+    bg.innerHTML = `<div class="modal">
+      <header>${imgs[p.id] ? `<img src="${esc(imgs[p.id])}" id="zoomimg" alt="">` : ''}
+        <div class="grow"><b>${esc(p.title||'(未命名)')}</b><div class="sub">${esc(p.purchase_date)} · 總成本 ${twd(cost(p))} · 已賣 ${twd(st)}
+          ${p.source_url ? ` · <a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>`:''}</div>
+          <div class="sub">分攤成本：${units.length && units.every(u=>+u.price_jpy>0) ? '依每隻日幣價比例' : '平均分攤（每隻都填日幣價就會改按比例）'}</div></div>
+        <button class="x" id="close" aria-label="關閉">✕</button></header>
+      <div class="tablewrap">${unitsTableHTML(units, al)}</div>
+      <div class="row" style="margin-top:10px;justify-content:space-between">
+        <button class="btn small" id="addu">＋ 加一隻</button>
+        <div class="row"><button class="btn" id="cancel">取消</button><button class="btn primary" id="saveu">儲存</button></div></div>
+    </div>`;
+    bindUnitsTable(bg, units, draw);
+    $('#addu', bg).onclick = () => { units.push(newUnit()); draw(); };
+    $('#close', bg).onclick = $('#cancel', bg).onclick = () => bg.remove();
+    if ($('#zoomimg', bg)) $('#zoomimg', bg).onclick = () => zoom(imgs[p.id]);
+    $('#saveu', bg).onclick = async (e) => {
+      e.target.disabled = true;
+      try { await store.saveUnits(p.id, units); await reload(); bg.remove(); toast('已儲存'); route(); }
+      catch(err){ console.error(err); toast('儲存失敗：' + (err.message||err)); e.target.disabled = false; }
+    };
+  };
+  bg.addEventListener('alloc', () => { const al = alloc(p, units); $$('td.alloc', bg).forEach((td,i)=> td.textContent = al[i]==null ? '—' : twd(al[i])); });
+  bg.onclick = e => { if (e.target === bg) bg.remove(); };
+  document.body.appendChild(bg); draw();
+}
+function zoom(src){ const z=document.createElement('div'); z.className='zoom'; z.innerHTML=`<img src="${esc(src)}" alt="">`; z.onclick=()=>z.remove(); document.body.appendChild(z); }
+const newUnit = () => ({ id: uuid(), name:'', price_jpy:null, list_price:null, status:'stock', sold_price:null, sold_date:null, buyer:'' });
+
+function unitsTableHTML(units, al){
+  return `<table class="units"><thead><tr><th style="width:22%">名稱</th><th>日幣價</th><th>分攤成本</th><th>定價</th><th>狀態</th><th>賣出價</th><th>售出日</th><th>買家</th><th></th></tr></thead>
+    <tbody>${units.map((u,i)=>`<tr data-i="${i}">
+      <td><input data-k="name" value="${esc(u.name)}" placeholder="第 ${i+1} 隻"></td>
+      <td><input data-k="price_jpy" type="number" inputmode="numeric" value="${u.price_jpy??''}"></td>
+      <td class="alloc">${al[i]==null?'—':twd(al[i])}</td>
+      <td><input data-k="list_price" type="number" inputmode="numeric" value="${u.list_price??''}"></td>
+      <td><select data-k="status">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${u.status===k?'selected':''}>${v}</option>`).join('')}</select></td>
+      <td><input data-k="sold_price" type="number" inputmode="numeric" value="${u.sold_price??''}" ${u.status!=='sold'?'placeholder="—"':''}></td>
+      <td><input data-k="sold_date" type="date" value="${u.sold_date??''}"></td>
+      <td><input data-k="buyer" value="${esc(u.buyer||'')}"></td>
+      <td><button class="x" data-del="${i}" aria-label="刪除">✕</button></td></tr>`).join('')}</tbody></table>
+    ${units.length ? '' : '<div class="sub" style="padding:8px">還沒有加入任何一隻</div>'}`;
+}
+function bindUnitsTable(root, units, redraw){
+  $$('.units input, .units select', root).forEach(el => {
+    const ev = el.tagName === 'SELECT' ? 'change' : 'input';
+    el.addEventListener(ev, () => {
+      const u = units[+el.closest('tr').dataset.i], k = el.dataset.k;
+      u[k] = ['price_jpy','list_price','sold_price'].includes(k) ? num(el.value) : el.value;
+      if (k === 'status') {
+        if (el.value === 'sold') { if (u.sold_price == null) u.sold_price = u.list_price; if (!u.sold_date) u.sold_date = today(); }
+        redraw();
+      } else if (k === 'price_jpy') {
+        // 只更新分攤欄，不重繪（保留游標）
+        root.dispatchEvent(new CustomEvent('alloc'));
+      }
+    });
+  });
+  $$('[data-del]', root).forEach(b => b.onclick = () => { units.splice(+b.dataset.del, 1); redraw(); });
+}
+
+/* ---------- 新增 / 編輯 ---------- */
+async function fetchRate(){
+  const tries = [
+    async () => (await (await fetch('https://api.frankfurter.dev/v1/latest?base=JPY&symbols=TWD')).json()).rates.TWD,
+    async () => (await (await fetch('https://open.er-api.com/v6/latest/JPY')).json()).rates.TWD
+  ];
+  for (const t of tries) { try { const r = await t(); if (r > 0) return Math.round(r*10000)/10000; } catch(e){} }
+  return null;
+}
+
+function renderForm(edit){
+  const isNew = !edit;
+  const p = edit ? {...edit} : { id: uuid(), title:'', source_url:'', image_path:null, image_url:null, purchase_date: today(),
+    price_jpy:null, rate: +localStorage.getItem('ledger-last-rate') || CFG.defaultRate || .215, paid_twd:null, shipping:0, fee:0, discount:0, tags:[], note:'' };
+  let units = (edit?.units || [newUnit()]).map(u=>({...u}));
+  let tags = [...(p.tags||[])];
+  let imgBlob = null, imgPreview = edit ? imgs[edit.id] : null;
+  const known = allTags();
+
+  $('#app').innerHTML = `
+    <h1>${isNew ? '新增記錄' : '編輯記錄'}</h1>
+    <div class="card"><div class="grid">
+      <div class="wide"><div class="imgbox" id="imgbox" tabindex="0">${imgPreview ? `<img src="${esc(imgPreview)}" alt="">` : ''}
+        <div>${imgPreview ? '點擊更換圖片' : '點擊選擇圖片、拖曳進來，或直接 Ctrl+V 貼上截圖'}</div></div>
+        <input type="file" id="file" accept="image/*" class="hidden">
+        <div class="row" style="margin-top:8px"><input id="imgurl" placeholder="或貼上圖片網址（不上傳，直接連結）" style="flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:8px" value="${esc(p.image_url||'')}">
+          ${imgPreview ? '<button class="btn small danger" id="rmimg">移除圖片</button>' : ''}</div></div>
+      <label class="f wide">商品名稱<input id="title" value="${esc(p.title)}" placeholder="例如：赤羽業 娃娃 3 隻組"></label>
+      <label class="f wide">原始購買網址<input id="source_url" type="url" value="${esc(p.source_url||'')}" placeholder="https://"></label>
+      <label class="f">購買日期<input id="purchase_date" type="date" value="${esc(p.purchase_date)}"></label>
+      <label class="f">原價（日幣）<input id="price_jpy" type="number" inputmode="numeric" value="${p.price_jpy??''}"></label>
+      <label class="f">匯率 JPY→TWD<span class="row"><input id="rate" type="number" step="0.0001" inputmode="decimal" value="${p.rate??''}" style="flex:1;min-width:0">
+        <button class="btn small" id="getrate" type="button">即時</button></span></label>
+      <label class="f">實際購買價（台幣）<input id="paid_twd" type="number" inputmode="numeric" value="${p.paid_twd??''}" placeholder="留空 = 原價×匯率"></label>
+      <label class="f">運費<input id="shipping" type="number" inputmode="numeric" value="${p.shipping??0}"></label>
+      <label class="f">手續費<input id="fee" type="number" inputmode="numeric" value="${p.fee??0}"></label>
+      <label class="f">折扣（台幣）<input id="discount" type="number" inputmode="numeric" value="${p.discount??0}"></label>
+      <label class="f wide">標籤<div class="tags-input" id="tagbox"><input id="taginput" list="taglist" placeholder="輸入後按 Enter"></div>
+        <datalist id="taglist">${known.map(t=>`<option value="${esc(t)}">`).join('')}</datalist></label>
+      <label class="f wide">備註<textarea id="note">${esc(p.note||'')}</textarea></label>
+    </div>
+    <div class="calc" id="calc"></div></div>
+
+    <div class="card"><div class="row" style="justify-content:space-between"><b>每一隻</b>
+      <span class="row"><button class="btn small" id="addu">＋ 加一隻</button><button class="btn small" id="addn">＋ 一次加多隻</button></span></div>
+      <div class="tablewrap" id="unitwrap" style="margin-top:8px"></div></div>
+
+    <div class="row" style="justify-content:space-between">
+      ${isNew ? '<span></span>' : '<button class="btn danger" id="del">刪除這筆</button>'}
+      <span class="row"><button class="btn" id="cancel">取消</button><button class="btn primary" id="save">儲存</button></span></div>`;
+
+  const val = id => $('#'+id).value;
+  const read = () => {
+    Object.assign(p, { title: val('title').trim(), source_url: val('source_url').trim() || null, purchase_date: val('purchase_date') || today(),
+      price_jpy: num(val('price_jpy')), rate: num(val('rate')), paid_twd: num(val('paid_twd')),
+      shipping: num(val('shipping'))||0, fee: num(val('fee'))||0, discount: num(val('discount'))||0, note: val('note').trim() || null, tags });
+    const u = val('imgurl').trim(); if (u && !imgBlob) { p.image_url = u; } else if (!u && !imgBlob && !p.image_path) p.image_url = null;
+  };
+  const calc = () => {
+    read();
+    const tmp = {...p, units};
+    $('#calc').innerHTML = [
+      ['實際購買價', twd(paid(tmp))], ['總成本', twd(cost(tmp))],
+      ['每隻平均成本', units.length && cost(tmp)!=null ? twd(cost(tmp)/units.length) : '—'],
+      ['定價合計', twd(units.reduce((s,u)=>s+(+u.list_price||0),0))],
+      ['已賣出', twd(soldTotal(tmp))], ['利潤', twd(profit(tmp))], ['全賣完利潤', cost(tmp)==null?'—':twd(expectTotal(tmp)-cost(tmp))]
+    ].map(([k,v])=>`<div><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+    const al = alloc(tmp, units);
+    $$('#unitwrap td.alloc').forEach((td,i) => td.textContent = al[i]==null ? '—' : twd(al[i]));
+  };
+  const drawUnits = () => {
+    const w = $('#unitwrap'); w.innerHTML = unitsTableHTML(units, alloc({...p, units}, units));
+    bindUnitsTable(w, units, drawUnits);
+    $$('input', w).forEach(i => i.addEventListener('input', calc));
+    calc();
+  };
+  const drawTags = () => {
+    $$('#tagbox .chip').forEach(c=>c.remove());
+    tags.forEach((t,i) => { const s=document.createElement('span'); s.className='chip'; s.textContent=t; s.title='點擊移除'; s.onclick=()=>{ tags.splice(i,1); drawTags(); }; $('#tagbox').insertBefore(s, $('#taginput')); });
+  };
+  const addTag = () => { const v = $('#taginput').value.trim().replace(/^#/, ''); if (v && !tags.includes(v)) tags.push(v); $('#taginput').value=''; drawTags(); };
+  $('#taginput').addEventListener('keydown', e => { if (e.key==='Enter' || e.key===',' || e.key==='，') { e.preventDefault(); addTag(); } else if (e.key==='Backspace' && !e.target.value && tags.length) { tags.pop(); drawTags(); } });
+  $('#taginput').addEventListener('change', addTag);
+  $('#unitwrap').addEventListener('alloc', calc);
+  drawTags(); drawUnits();
+  $$('.card input, .card textarea').forEach(i => { if (!i.closest('#unitwrap')) i.addEventListener('input', calc); });
+
+  // 圖片
+  const setImg = (blob) => { if (!blob || !blob.type.startsWith('image/')) return; imgBlob = blob; const u = URL.createObjectURL(blob);
+    $('#imgbox').innerHTML = `<img src="${u}" alt=""><div>點擊更換圖片</div>`; $('#imgurl').value = ''; };
+  $('#imgbox').onclick = () => $('#file').click();
+  $('#file').onchange = e => setImg(e.target.files[0]);
+  $('#imgbox').ondragover = e => { e.preventDefault(); e.currentTarget.classList.add('drag'); };
+  $('#imgbox').ondragleave = e => e.currentTarget.classList.remove('drag');
+  $('#imgbox').ondrop = e => { e.preventDefault(); e.currentTarget.classList.remove('drag'); setImg(e.dataTransfer.files[0]); };
+  document.onpaste = e => { if (!location.hash.match(/^#(new|edit)/)) return; const it = [...(e.clipboardData?.items||[])].find(i=>i.type.startsWith('image/')); if (it) { e.preventDefault(); setImg(it.getAsFile()); toast('已貼上圖片'); } };
+  $('#imgurl').onchange = () => { const u = $('#imgurl').value.trim(); if (u) { imgBlob = null; $('#imgbox').innerHTML = `<img src="${esc(u)}" alt=""><div>使用外部網址</div>`; } };
+  if ($('#rmimg')) $('#rmimg').onclick = async () => { if (!confirm('移除這筆的圖片？')) return; p._clearImage = true; p.image_url = null; $('#imgurl').value=''; $('#imgbox').innerHTML='<div>已移除，儲存後生效</div>'; };
+
+  $('#getrate').onclick = async (e) => { e.target.disabled = true; e.target.textContent = '…'; const r = await fetchRate(); e.target.disabled = false; e.target.textContent = '即時';
+    if (r) { $('#rate').value = r; calc(); toast('匯率 ' + r); } else toast('抓不到匯率，請手動輸入'); };
+  $('#addu').onclick = () => { units.push(newUnit()); drawUnits(); };
+  $('#addn').onclick = () => { const n = parseInt(prompt('要加幾隻？', '3')); if (n > 0 && n <= 50) { for (let i=0;i<n;i++) units.push(newUnit()); drawUnits(); } };
+  $('#cancel').onclick = () => history.length > 1 ? history.back() : (location.hash = 'home');
+  if ($('#del')) $('#del').onclick = async () => { if (!confirm('確定刪除這筆紀錄和所有「每一隻」？')) return; try { await store.remove(p.id); await reload(); toast('已刪除'); location.hash='home'; } catch(err){ toast('刪除失敗：'+(err.message||err)); } };
+  $('#save').onclick = async (e) => {
+    read(); if ($('#taginput').value.trim()) { addTag(); read(); }
+    if (!p.title) { toast('請填商品名稱'); $('#title').focus(); return; }
+    e.target.disabled = true; e.target.textContent = '儲存中…';
+    try {
+      if (p._clearImage) { await store.clearImage(p); } delete p._clearImage;
+      if (p.rate) localStorage.setItem('ledger-last-rate', p.rate);
+      const clean = units.filter(u => u.name || u.list_price != null || u.price_jpy != null || u.status !== 'stock');
+      await store.save(p, clean, imgBlob);
+      await reload(); toast('已儲存'); location.hash = 'home';
+    } catch(err){ console.error(err); toast('儲存失敗：' + (err.message||err)); e.target.disabled = false; e.target.textContent = '儲存'; }
+  };
+}
+
+/* ---------- 統計 ---------- */
+function monthKey(d){ return String(d||'').slice(0,7); }
+function monthsBetween(a, b){ const out=[]; let [y,m]=a.split('-').map(Number); const [Y,M]=b.split('-').map(Number); while (y<Y || (y===Y && m<=M)) { out.push(`${y}-${String(m).padStart(2,'0')}`); m++; if (m>12){m=1;y++;} } return out; }
+
+function monthly(){
+  const now = monthKey(today());
+  const all = items.flatMap(p => [monthKey(p.purchase_date), ...(p.units||[]).filter(u=>u.status==='sold').map(u=>monthKey(u.sold_date||p.purchase_date))]).filter(Boolean).sort();
+  let start;
+  if (ui.range === 'all') start = all[0] || now;
+  else if (ui.range === 'year') start = now.slice(0,4) + '-01';
+  else { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - (+ui.range - 1)); start = d.toISOString().slice(0,7); }
+  const keys = monthsBetween(start, now);
+  const m = Object.fromEntries(keys.map(k => [k, {k, cost:0, sales:0, n:0, sold:0}]));
+  items.forEach(p => {
+    const k = monthKey(p.purchase_date); if (m[k]) { m[k].cost += cost(p)||0; m[k].n++; }
+    (p.units||[]).forEach(u => { if (u.status!=='sold') return; const s = monthKey(u.sold_date || p.purchase_date); if (m[s]) { m[s].sales += +u.sold_price||0; m[s].sold++; } });
+  });
+  return { keys, rows: keys.map(k=>m[k]), start };
+}
+
+function tagStats(start){
+  const t = new Map();
+  items.filter(p => monthKey(p.purchase_date) >= start).forEach(p => {
+    const tg = (p.tags && p.tags.length) ? p.tags : ['（無標籤）'];
+    tg.forEach(name => {
+      const r = t.get(name) || { name, n:0, units:0, sold:0, cost:0, sales:0, expect:0 };
+      r.n++; r.units += (p.units||[]).length; r.sold += soldCount(p); r.cost += cost(p)||0; r.sales += soldTotal(p); r.expect += expectTotal(p);
+      t.set(name, r);
+    });
+  });
+  return [...t.values()].sort((a,b)=>b.cost-a.cost);
+}
+
+function renderStats(){
+  const { rows, start } = monthly();
+  const tags = tagStats(start);
+  const tc = rows.reduce((s,r)=>s+r.cost,0), ts = rows.reduce((s,r)=>s+r.sales,0);
+  const stock = items.reduce((s,p)=>s+(p.units||[]).filter(u=>u.status!=='sold').length,0);
+  const stockVal = items.reduce((s,p)=>{ const al=alloc(p); return s+(p.units||[]).reduce((a,u,i)=>a+(u.status!=='sold'?(al[i]||0):0),0); },0);
+  const maxTag = Math.max(1, ...tags.map(t=>t.cost));
+  $('#app').innerHTML = `
+    <div class="row" style="justify-content:space-between"><h1>統計</h1>
+      <div class="seg" id="range">${[['6','近 6 月'],['12','近 12 月'],['year','今年'],['all','全部']].map(([k,v])=>`<button data-k="${k}" class="${ui.range===k?'on':''}">${v}</button>`).join('')}</div></div>
+    <div class="summary">
+      <div class="tile"><div class="k">期間總成本</div><div class="v">${twd(tc)}</div></div>
+      <div class="tile"><div class="k">期間賣出</div><div class="v">${twd(ts)}</div></div>
+      <div class="tile"><div class="k">期間淨額</div><div class="v ${ts-tc>=0?'pos':'neg'}">${twd(ts-tc)}</div></div>
+      <div class="tile"><div class="k">目前庫存（全部）</div><div class="v">${stock} 隻</div><div class="k">成本約 ${twd(stockVal)}</div></div>
+    </div>
+    <h2>每月成本統計</h2>
+    <div class="sub" style="margin-bottom:8px">成本算在購買月份；賣出算在售出日期的月份（沒填售出日就算購買月份）。</div>
+    <div class="viz" id="viz">
+      <div class="legend"><span><i style="background:var(--series-1)"></i>成本</span><span><i style="background:var(--series-2)"></i>賣出</span></div>
+      <div id="chart"></div>
+    </div>
+    <details style="margin-top:8px"><summary class="sub" style="cursor:pointer">表格</summary>
+      <table class="plain"><thead><tr><th>月份</th><th>購買筆數</th><th>成本</th><th>賣出隻數</th><th>賣出</th><th>淨額</th></tr></thead>
+      <tbody>${rows.slice().reverse().map(r=>`<tr class="click" data-m="${r.k}"><td>${r.k}</td><td>${r.n}</td><td>${twd(r.cost)}</td><td>${r.sold}</td><td>${twd(r.sales)}</td><td class="${r.sales-r.cost>=0?'pos':'neg'}">${twd(r.sales-r.cost)}</td></tr>`).join('')}</tbody></table></details>
+
+    <h2>標籤統計</h2>
+    <div class="sub" style="margin-bottom:8px">依購買日期篩選期間。一筆有多個標籤時，會分別計入每個標籤。點一列可在首頁篩選。</div>
+    <div class="viz tablewrap"><table class="plain" style="min-width:640px"><thead><tr><th>標籤</th><th>筆數</th><th>售出 / 隻數</th><th style="width:22%"></th><th>成本</th><th>已賣出</th><th>利潤</th><th>全賣完利潤</th></tr></thead>
+      <tbody>${tags.length ? tags.map(t=>`<tr class="click" data-tag="${esc(t.name)}"><td>${esc(t.name)}</td><td>${t.n}</td><td>${t.sold} / ${t.units}</td>
+        <td><div class="bar" style="width:${(t.cost/maxTag*100).toFixed(1)}%"></div></td><td>${twd(t.cost)}</td><td>${twd(t.sales)}</td>
+        <td class="${t.sales-t.cost>=0?'pos':'neg'}">${twd(t.sales-t.cost)}</td><td>${twd(t.expect-t.cost)}</td></tr>`).join('') : '<tr><td colspan="8" class="sub">這段期間沒有資料</td></tr>'}</tbody></table></div>`;
+  $$('#range button').forEach(b => b.onclick = () => { ui.range = b.dataset.k; renderStats(); });
+  $$('tr[data-tag]').forEach(tr => tr.onclick = () => { ui.tag = tr.dataset.tag === '（無標籤）' ? '' : tr.dataset.tag; ui.month=''; location.hash='home'; });
+  $$('tr[data-m]').forEach(tr => tr.onclick = () => { ui.month = tr.dataset.m; ui.tag=''; location.hash='home'; });
+  drawChart(rows);
+  window.onresize = () => { if ((location.hash||'').startsWith('#stats')) drawChart(rows); };
+}
+
+function niceMax(v){ if (v<=0) return 1000; const p = Math.pow(10, Math.floor(Math.log10(v))); for (const m of [1,1.5,2,2.5,3,4,5,6,8,10]) if (m*p >= v) return m*p; return 10*p; }
+function drawChart(rows){
+  const host = $('#chart'); if (!host) return;
+  const W = Math.max(320, host.clientWidth), H = 260, L = 56, R = 8, T = 10, B = 28;
+  const max = niceMax(Math.max(...rows.map(r=>Math.max(r.cost, r.sales)), 0));
+  const iw = W-L-R, ih = H-T-B, n = rows.length, band = iw / n;
+  const bw = Math.max(3, Math.min(22, (band - 8) / 2));
+  const y = v => T + ih - v/max*ih;
+  const ticks = [0, .25, .5, .75, 1].map(f => f*max);
+  const fmtK = v => v >= 10000 ? (v/10000).toLocaleString('zh-TW',{maximumFractionDigits:1})+'萬' : v.toLocaleString('zh-TW');
+  const every = Math.ceil(n / Math.floor(iw/52));
+  const bar = (x, v, color) => { if (v<=0) return ''; const h = Math.max(1, ih - (y(v)-T)), r = Math.min(4, bw/2, h);
+    const yt = y(v), yb = T+ih; return `<path d="M${x},${yb} V${yt+r} Q${x},${yt} ${x+r},${yt} H${x+bw-r} Q${x+bw},${yt} ${x+bw},${yt+r} V${yb} Z" fill="${color}"/>`; };
+  let s = `<svg width="${W}" height="${H}" role="img" aria-label="每月成本與賣出長條圖" style="display:block;font-size:11px">`;
+  ticks.forEach(t => s += `<line x1="${L}" x2="${W-R}" y1="${y(t)}" y2="${y(t)}" stroke="#e3e6ea" ${t?'':'stroke="#b9bec5"'}/><text x="${L-6}" y="${y(t)+4}" text-anchor="end" fill="#868b92">${fmtK(t)}</text>`);
+  rows.forEach((r,i) => {
+    const cx = L + band*i + band/2;
+    s += bar(cx - bw - 1, r.cost, 'var(--series-1)') + bar(cx + 1, r.sales, 'var(--series-2)');
+    if (i % every === 0 || i === n-1) s += `<text x="${cx}" y="${H-8}" text-anchor="middle" fill="#52575e">${r.k.slice(2).replace('-','/')}</text>`;
+    s += `<rect class="hit" data-i="${i}" x="${L+band*i}" y="${T}" width="${band}" height="${ih}" fill="transparent"/>`;
+  });
+  s += '</svg>';
+  host.innerHTML = s;
+  const viz = $('#viz'); let tip = null;
+  $$('.hit', host).forEach(h => {
+    h.onmouseenter = h.ontouchstart = () => {
+      const r = rows[+h.dataset.i]; tip && tip.remove(); tip = document.createElement('div'); tip.className = 'tip';
+      tip.innerHTML = `<b>${r.k}</b><br>成本 ${twd(r.cost)}（${r.n} 筆）<br>賣出 ${twd(r.sales)}（${r.sold} 隻）<br>淨額 ${twd(r.sales-r.cost)}`;
+      const hb = h.getBoundingClientRect(), vb = viz.getBoundingClientRect();
+      tip.style.left = Math.min(vb.width-80, Math.max(80, hb.left - vb.left + hb.width/2)) + 'px';
+      tip.style.top = (y(Math.max(r.cost, r.sales)) + (host.getBoundingClientRect().top - vb.top) - 6) + 'px';
+      viz.appendChild(tip); h.setAttribute('fill','rgba(23,93,128,.06)');
+    };
+    h.onmouseleave = () => { tip && tip.remove(); tip = null; h.setAttribute('fill','transparent'); };
+  });
+}
+
+/* ---------- 登入 ---------- */
+function renderLogin(){
+  $('#tabs').classList.add('hidden');
+  $('#app').innerHTML = `<div class="card login"><h1>商品紀錄 · 登入</h1>
+    <label class="f">Email<input id="em" type="email" autocomplete="username"></label><br>
+    <label class="f">密碼<input id="pw" type="password" autocomplete="current-password"></label><br>
+    <button class="btn primary" id="go" style="width:100%">登入</button><div class="sub" id="err" style="margin-top:8px"></div></div>`;
+  const go = async () => { $('#go').disabled = true; try { await store.login($('#em').value.trim(), $('#pw').value); await start(); } catch(e){ $('#err').textContent = '登入失敗：' + (e.message||e); $('#go').disabled = false; } };
+  $('#go').onclick = go; $('#pw').onkeydown = e => { if (e.key==='Enter') go(); };
+}
+
+async function start(){
+  try { await reload(); } catch(e){ console.error(e); $('#app').innerHTML = `<div class="card">讀取資料失敗：${esc(e.message||e)}<br><span class="sub">確認已在 Supabase 執行 schema.sql。</span></div>`; return; }
+  $('#tabs').classList.remove('hidden');
+  window.onhashchange = route; route();
+}
+
+(async function boot(){
+  const useSupa = CFG.supabaseUrl && CFG.supabaseAnonKey && window.supabase;
+  store = useSupa ? SupaStore : LocalStore;
+  if (CFG.supabaseUrl && !window.supabase) toast('Supabase 程式庫載入失敗，改用本機模式');
+  const ok = await store.init();
+  if (!ok) renderLogin(); else start();
+})();
+})();
+</script>
+</body>
+</html>
