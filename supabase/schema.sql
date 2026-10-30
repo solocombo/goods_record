@@ -42,6 +42,10 @@ create table if not exists public.units (
   created_at  timestamptz not null default now()
 );
 
+-- v4：運送狀態（到內湖、日本運送中、國際運送中、台灣運送中、到中山）
+alter table public.purchases add column if not exists ship_status text;
+create index if not exists purchases_ship_idx on public.purchases(ship_status);
+
 -- v3：購買平台、進貨稅金
 alter table public.purchases add column if not exists platform text;                         -- BNS、台灣煤爐…
 alter table public.purchases add column if not exists buy_tax  numeric(12,0) not null default 0; -- 進貨稅金（計入總成本）
