@@ -204,7 +204,20 @@ table.plain{width:100%;border-collapse:collapse;font-variant-numeric:tabular-num
 .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:#fff6e6;padding:9px 18px;border-radius:99px;z-index:99;font-size:14px}
 .login{max-width:360px;margin:10vh auto}
 .zoom{position:fixed;inset:0;background:rgba(20,12,5,.88);display:flex;align-items:center;justify-content:center;z-index:80;cursor:zoom-out}
-.zoom img{max-width:96vw;max-height:96vh}
+.zoom img{max-width:96vw;max-height:92vh}
+.gnav{position:fixed;top:50%;transform:translateY(-50%);width:48px;height:64px;border:0;border-radius:10px;background:rgba(255,246,230,.18);color:#fff;font-size:34px;cursor:pointer}
+.gnav.l{left:10px} .gnav.r{right:10px}
+.gcount{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);color:#f5e6c8;font-size:14px}
+.proofs{display:flex;flex-wrap:wrap;gap:8px;padding:8px;border:2px dashed var(--line2);border-radius:var(--radius);background:var(--card2);min-height:112px;align-items:flex-start}
+.proofs:focus{outline:2px solid var(--gold);outline-offset:1px}
+.proofs.drag{border-color:var(--gold);background:#fbefd6}
+.pf{position:relative;width:96px;height:96px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:#fff;cursor:zoom-in}
+.pf img{width:100%;height:100%;object-fit:cover}
+.pf .rm{position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;border:0;background:rgba(58,45,34,.75);color:#fff;font-size:13px;line-height:22px;cursor:pointer;padding:0}
+.pf.new::after{content:"新";position:absolute;left:3px;top:3px;background:var(--gold);color:#fff;font-size:10px;border-radius:4px;padding:0 4px}
+.pfadd{width:96px;height:96px;border-radius:8px;border:1px dashed var(--line2);background:#fff;color:var(--muted);font-size:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.pfadd b{font-size:22px;color:var(--gold-ink);font-weight:400}
+.proofbtn{border:0;background:none;color:var(--gold-ink);cursor:pointer;padding:0;font-size:12px;text-decoration:underline}
 </style>
 </head>
 <body>
@@ -336,9 +349,11 @@ const LocalStore = {
     }
     return out;
   },
-  async save(p, units, imgBlob){
+  proofs(p){ return (p.proof_data||[]).map(d => ({ ref:d, url:d })); },
+  async save(p, units, imgBlob, proofs){
     p = {...p};
     if (imgBlob) { p.image_data = await blobToDataURL(await compress(imgBlob, 640, .72)); p.image_url = null; }
+    if (proofs) { const out = []; for (const x of proofs) out.push(x.blob ? await blobToDataURL(await compress(x.blob, 1100, .8)) : x.ref); p.proof_data = out; }
     p.units = await this._units(p.id, units);
     p.updated_at = new Date().toISOString();
     const d = this._read();
@@ -375,16 +390,22 @@ const SupaStore = {
     if (error) throw error; return path;
   },
   _rm(paths){ paths = paths.filter(Boolean); if (paths.length) this.sb.storage.from('item-photos').remove(paths); },
-  async save(p, units, imgBlob){
-    p = {...p}; delete p.units; delete p.image_data;
-    let oldPath = null;
+  proofs(p){ return (p.proof_paths||[]).map(path => ({ ref:path, url: imgs['pf:'+path] || null })); },
+  async save(p, units, imgBlob, proofs){
+    p = {...p}; delete p.units; delete p.image_data; delete p.proof_data;
+    let oldPath = null, dropProofs = [];
+    if (proofs) {
+      const before = p.proof_paths || [], out = [];
+      for (const x of proofs) out.push(x.blob ? await this._upload(await compress(x.blob, 2000, .86), `proofs/${p.id}/${uuid().slice(0,8)}`) : x.ref);
+      dropProofs = before.filter(b => !out.includes(b)); p.proof_paths = out;
+    }
     if (imgBlob) {
       const path = await this._upload(await compress(imgBlob, 1400, .85), `${p.purchase_date.slice(0,7)}/${p.id}`);
       oldPath = p.image_path; p.image_path = path; p.image_url = null;
     }
     const { error: e1 } = await this.sb.from('purchases').upsert(p); if (e1) throw e1;
     await this.saveUnits(p.id, units);
-    if (oldPath) this._rm([oldPath]);
+    this._rm([oldPath, ...dropProofs]);
     return p;
   },
   async saveUnits(pid, units){
@@ -409,13 +430,13 @@ const SupaStore = {
   },
   async patch(id, obj){ const { error } = await this.sb.from('purchases').update(obj).eq('id', id); if (error) throw error; },
   async remove(id){
-    const { data } = await this.sb.from('purchases').select('image_path, units(image_path)').eq('id', id).single();
+    const { data } = await this.sb.from('purchases').select('image_path, proof_paths, units(image_path)').eq('id', id).single();
     const { error } = await this.sb.from('purchases').delete().eq('id', id); if (error) throw error;
-    if (data) this._rm([data.image_path, ...(data.units||[]).map(u=>u.image_path)]);
+    if (data) this._rm([data.image_path, ...(data.proof_paths||[]), ...(data.units||[]).map(u=>u.image_path)]);
   },
   async imageUrls(list){
     const m = {}, need = [], now = Date.now();
-    const objs = list.flatMap(p => [p, ...(p.units||[])]);
+    const objs = list.flatMap(p => [p, ...(p.units||[]), ...(p.proof_paths||[]).map(path => ({ id:'pf:'+path, image_path:path }))]);
     objs.forEach(o => {
       if (o.image_path) { const c = this.urlCache[o.image_path]; if (c && c.exp > now) m[o.id] = c.url; else need.push(o); }
       else m[o.id] = o.image_url || null;
@@ -547,6 +568,7 @@ function renderList(){
   });
   $$('.ledger tbody tr').forEach(tr => tr.onclick = e => {
     if (e.target.closest('.unitbtn, .minis')) { openUnits(tr.dataset.id); return; }
+    if (e.target.closest('.proofbtn')) { gallery(store.proofs(items.find(x=>x.id===tr.dataset.id)).map(x=>x.url), 0); return; }
     if (e.target.closest('a, select')) return;
     location.hash = 'edit/' + tr.dataset.id;
   });
@@ -563,7 +585,7 @@ function rowHTML(p){
     <td>${img ? `<img class="thumb" src="${esc(img)}" alt="" loading="lazy">` : '<div class="thumb empty">無圖</div>'}
       <select class="shipsel" title="運送狀態">${['', ...SHIP].map(v=>`<option value="${v}" ${(p.ship_status||'')===v?'selected':''}>${v||'— 狀態 —'}</option>`).join('')}</select></td>
     <td class="title-cell"><div class="t">${esc(p.title||'(未命名)')}</div>
-      <div class="meta">${esc(p.purchase_date)}${p.platform ? ` · <b class="plat">${esc(p.platform)}</b>` : ''}${p.source_url ? ` · <a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>` : ''}</div>
+      <div class="meta">${esc(p.purchase_date)}${p.platform ? ` · <b class="plat">${esc(p.platform)}</b>` : ''}${p.source_url ? ` · <a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>` : ''}${store.proofs(p).length ? ` · <button class="proofbtn" type="button">購買證明 ${store.proofs(p).length}</button>` : ''}</div>
       <div>${(p.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div></td>
     <td class="num">${jpy(p.price_jpy)}</td>
     <td class="num">${twd(paid(p))}${p.paid_twd==null && p.rate ? `<span class="est">匯率 ${p.rate}</span>`:''}</td>
@@ -652,6 +674,8 @@ document.addEventListener('paste', e => {
   const it = [...(e.clipboardData?.items||[])].find(i=>i.type.startsWith('image/')); if (!it) return;
   const box = document.activeElement && document.activeElement.closest && document.activeElement.closest('.uimg');
   if (box && box._setBlob) { e.preventDefault(); box._setBlob(it.getAsFile()); toast('已貼到這一隻'); return; }
+  const pz = document.activeElement && document.activeElement.closest && document.activeElement.closest('#proofzone');
+  if (pz && window.__proofPaste) { e.preventDefault(); window.__proofPaste([...e.clipboardData.items].filter(i=>i.type.startsWith('image/')).map(i=>i.getAsFile())); toast('已加入購買證明'); return; }
   if (window.__mainPaste) { e.preventDefault(); window.__mainPaste(it.getAsFile()); toast('已貼上主圖'); }
 });
 
@@ -661,7 +685,7 @@ function openUnits(id){
   let units = (p.units||[]).map(u=>({...u}));
   const bg = document.createElement('div'); bg.className = 'modal-bg';
   const close = () => { bg.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = e => { if (e.key === 'Escape' && !$('.cropbg')) close(); };
+  const onKey = e => { if (e.key === 'Escape' && !$('.cropbg') && !$('.zoom')) close(); };
   document.addEventListener('keydown', onKey);
   const head = () => {
     const st = units.reduce((s,u)=>s+(sold(u)?(+u.sold_price||0):0),0), tx = units.reduce((s,u)=>s+(sold(u)?(+u.tax||0):0),0);
@@ -671,7 +695,7 @@ function openUnits(id){
     bg.innerHTML = `<div class="modal">
       <div class="mh">${imgs[p.id] ? `<img src="${esc(imgs[p.id])}" id="zoomimg" alt="">` : ''}
         <div class="grow"><div class="mt">${esc(p.title||'(未命名)')}</div>
-          <div class="sub">${esc(p.purchase_date)}${p.platform ? ` · ${esc(p.platform)}` : ''}${p.ship_status ? ` · <span class="ship ${shipCls(p.ship_status)}">${esc(p.ship_status)}</span>` : ''}${p.source_url ? ` · <a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>`:''}</div>
+          <div class="sub">${esc(p.purchase_date)}${p.platform ? ` · ${esc(p.platform)}` : ''}${p.ship_status ? ` · <span class="ship ${shipCls(p.ship_status)}">${esc(p.ship_status)}</span>` : ''}${store.proofs(p).length ? ` · <button class="proofbtn" type="button" id="mproof">購買證明 ${store.proofs(p).length}</button>` : ''}${p.source_url ? ` · <a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>`:''}</div>
           <div style="margin-top:4px" id="mhsum">${head()}</div>
           <div class="sub" id="mhmode">${allocMode(units)}</div></div>
         <button class="x" id="close" aria-label="關閉">✕</button></div>
@@ -684,6 +708,7 @@ function openUnits(id){
     $('#addu', bg).onclick = () => { units.push(newUnit()); draw(); };
     $('#close', bg).onclick = $('#cancel', bg).onclick = close;
     if ($('#zoomimg', bg)) $('#zoomimg', bg).onclick = () => zoom(imgs[p.id]);
+    if ($('#mproof', bg)) $('#mproof', bg).onclick = () => gallery(store.proofs(p).map(x=>x.url), 0);
     $('#saveu', bg).onclick = async (e) => {
       e.target.disabled = true; e.target.textContent = '儲存中…';
       try { await store.saveUnits(p.id, units); await reload(); close(); toast('已儲存'); route(); }
@@ -692,6 +717,18 @@ function openUnits(id){
   };
   bg.onclick = e => { if (e.target === bg) close(); };
   document.body.appendChild(bg); draw();
+}
+function gallery(urls, i){
+  urls = urls.filter(Boolean); if (!urls.length) return;
+  const z = document.createElement('div'); z.className = 'zoom';
+  const show = () => { z.innerHTML = `<img src="${esc(urls[i])}" alt="">${urls.length>1 ? `<button class="gnav l" aria-label="上一張">‹</button><button class="gnav r" aria-label="下一張">›</button><div class="gcount">${i+1} / ${urls.length}</div>` : ''}`;
+    const l = $('.gnav.l', z), r = $('.gnav.r', z);
+    if (l) l.onclick = e => { e.stopPropagation(); i = (i-1+urls.length)%urls.length; show(); };
+    if (r) r.onclick = e => { e.stopPropagation(); i = (i+1)%urls.length; show(); }; };
+  const key = e => { if (e.key==='Escape') close(); else if (e.key==='ArrowLeft' && urls.length>1) { i=(i-1+urls.length)%urls.length; show(); } else if (e.key==='ArrowRight' && urls.length>1) { i=(i+1)%urls.length; show(); } };
+  const close = () => { z.remove(); document.removeEventListener('keydown', key); };
+  z.onclick = close; document.addEventListener('keydown', key);
+  document.body.appendChild(z); show();
 }
 function zoom(src){ const z=document.createElement('div'); z.className='zoom'; z.innerHTML=`<img src="${esc(src)}" alt="">`; z.onclick=()=>z.remove(); document.body.appendChild(z); }
 
@@ -713,6 +750,7 @@ function renderForm(edit){
   let units = (edit?.units?.length ? edit.units : [newUnit()]).map(u=>({...u}));
   let tags = [...(p.tags||[])];
   let imgBlob = null, mainSrc = edit ? imgs[edit.id] : null;
+  let proofs = edit ? store.proofs(edit) : [];   // {ref,url} 既有；{blob,url} 新加
   const known = allTags();
 
   $('#app').innerHTML = `
@@ -741,6 +779,8 @@ function renderForm(edit){
       <label class="f wide">標籤<div class="tags-input" id="tagbox"><input id="taginput" list="taglist" placeholder="輸入後按 Enter"></div>
         <datalist id="taglist">${known.map(t=>`<option value="${esc(t)}">`).join('')}</datalist></label>
       <label class="f wide">備註<textarea id="note">${esc(p.note||'')}</textarea></label>
+      <div class="wide"><div style="font-size:12.5px;color:var(--ink2);margin-bottom:4px">購買證明 <span class="sub">（可多張：點「＋」選擇、拖曳進來，或點一下這區再 Ctrl+V 貼上）</span></div>
+        <div class="proofs" id="proofzone" tabindex="0"></div></div>
     </div>
     <div class="calc" id="calc"></div></div>
 
@@ -793,6 +833,23 @@ function renderForm(edit){
   drawTags(); drawUnits();
   $$('.card .grid input, .card .grid textarea').forEach(i => i.addEventListener('input', calc));
 
+  // 購買證明
+  const drawProofs = () => {
+    const z = $('#proofzone');
+    z.innerHTML = proofs.map((x,i)=>`<div class="pf ${x.blob?'new':''}" data-i="${i}">${x.url ? `<img src="${esc(x.url)}" alt="">` : ''}<button type="button" class="rm" data-rm="${i}" aria-label="移除">✕</button></div>`).join('')
+      + `<button type="button" class="pfadd" id="pfadd"><b>＋</b>加入照片</button>`;
+    $$('.pf', z).forEach(el => el.onclick = e => { if (e.target.closest('.rm')) return; gallery(proofs.map(x=>x.url), +el.dataset.i); });
+    $$('[data-rm]', z).forEach(b => b.onclick = () => { if (!confirm('移除這張購買證明？（儲存後生效）')) return; proofs.splice(+b.dataset.rm, 1); drawProofs(); });
+    $('#pfadd').onclick = () => { const f=document.createElement('input'); f.type='file'; f.accept='image/*'; f.multiple=true; f.onchange=()=>addProofs([...f.files]); f.click(); };
+  };
+  const addProofs = files => { files.filter(f=>f && f.type.startsWith('image/')).forEach(f => proofs.push({ blob:f, url:URL.createObjectURL(f) })); drawProofs(); };
+  window.__proofPaste = addProofs;
+  const pz = $('#proofzone');
+  pz.ondragover = e => { e.preventDefault(); pz.classList.add('drag'); };
+  pz.ondragleave = () => pz.classList.remove('drag');
+  pz.ondrop = e => { e.preventDefault(); pz.classList.remove('drag'); addProofs([...e.dataTransfer.files]); };
+  drawProofs();
+
   // 主圖
   const setImg = (blob) => { if (!blob || !blob.type.startsWith('image/')) return; imgBlob = blob; mainSrc = URL.createObjectURL(blob);
     $('#imgbox').innerHTML = `<img src="${mainSrc}" alt=""><div>點擊更換主圖</div>`; $('#imgurl').value = ''; };
@@ -820,7 +877,7 @@ function renderForm(edit){
       if (p.rate) localStorage.setItem('ledger-last-rate', p.rate);
       if (p.platform) localStorage.setItem('ledger-last-platform', p.platform);
       const clean = units.filter(u => u.name || u.list_price != null || u.price_jpy != null || u.status !== 'stock' || u._blob || imgs[u.id]);
-      await store.save(p, clean, imgBlob);
+      await store.save(p, clean, imgBlob, proofs);
       await reload(); toast('已儲存');
       if (isNew) Object.assign(ui, { q:'', tag:'', month:'', platform:'', ship:'' }); // 新增後清掉篩選，才看得到剛建的那筆
       location.hash = 'home';
@@ -995,7 +1052,7 @@ async function start(){
   try { await reload(); } catch(e){ console.error(e); $('#app').innerHTML = `<div class="card">讀取資料失敗：${esc(e.message||e)}<br><span class="sub">確認已在 Supabase 執行 schema.sql。</span></div>`; return; }
   $('#tabs').classList.remove('hidden');
   if (store.mode === 'supabase') { $('#topact').innerHTML = '<button class="btn small" id="logout">登出</button>'; $('#logout').onclick = async () => { await store.logout(); location.reload(); }; }
-  window.onhashchange = () => { window.__mainPaste = null; route(); };
+  window.onhashchange = () => { window.__mainPaste = null; window.__proofPaste = null; route(); };
   route();
 }
 

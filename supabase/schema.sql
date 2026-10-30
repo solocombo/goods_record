@@ -42,6 +42,9 @@ create table if not exists public.units (
   created_at  timestamptz not null default now()
 );
 
+-- v5：購買證明（可多張，存 Storage 路徑）
+alter table public.purchases add column if not exists proof_paths text[] not null default '{}';
+
 -- v4：運送狀態（到內湖、日本運送中、國際運送中、台灣運送中、到中山）
 alter table public.purchases add column if not exists ship_status text;
 create index if not exists purchases_ship_idx on public.purchases(ship_status);
