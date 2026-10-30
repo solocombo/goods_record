@@ -1,5 +1,5 @@
 -- 商品紀錄系統 schema
--- 在 Supabase Dashboard → SQL Editor 整段貼上執行一次即可。
+-- 在 Supabase Dashboard → SQL Editor 整段貼上執行。整份可以重複執行（改版時再跑一次就會補上新欄位）。
 -- 權限設計：只有「已登入」的帳號能讀寫（給你和合夥人用）。
 -- 請到 Authentication → Sign In / Providers 關掉「Allow new users to sign up」，
 -- 再到 Authentication → Users 手動 Add user，避免陌生人自己註冊進來。
@@ -41,6 +41,12 @@ create table if not exists public.units (
   buyer       text,
   created_at  timestamptz not null default now()
 );
+
+-- v2：每一隻的圖片、售出資訊、稅金
+alter table public.units add column if not exists image_path   text;
+alter table public.units add column if not exists tax          numeric(12,0);
+alter table public.units add column if not exists sold_place   text;   -- 售出位置（蝦皮、社團、場販…）
+alter table public.units add column if not exists trade_method text;   -- 交易方式（賣貨便、面交…）
 
 create index if not exists units_purchase_idx on public.units(purchase_id);
 create index if not exists purchases_date_idx on public.purchases(purchase_date desc);

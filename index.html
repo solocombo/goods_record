@@ -3,138 +3,208 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#7a5230">
 <title>商品紀錄</title>
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <style>
 :root{
-  --head:#175d80; --head-ink:#fff;
-  --row1:#d0d5dc; --row2:#e6e9ed;
-  --bg:#f6f7f8; --card:#fff; --ink:#1b1d20; --ink2:#52575e; --muted:#868b92;
-  --line:#d9dde2; --accent:#175d80; --good:#16794a; --bad:#c23a3a;
-  --series-1:#2a78d6; --series-2:#eb6834;
-  --radius:10px;
+  /* 淺大地色＋金：招財 */
+  --bg:#f5eee2; --card:#fffaf2; --card2:#fbf4e8;
+  --ink:#3a2d22; --ink2:#6b5847; --muted:#9a8875; --line:#e7dac5; --line2:#d9c7aa;
+  --walnut:#7a5230; --walnut2:#93653b; --gold:#c4953f; --gold-soft:#f1e2bf; --gold-ink:#8a621d;
+  --row1:#f1e6d3; --row2:#f8f1e5;
+  --good:#2b7a57; --bad:#b4472e;
+  --series-1:#a8741f; /* 成本：金銅 */
+  --series-2:#1f8a68; /* 賣出：翡翠 */
+  --radius:12px;
+  --serif:"Noto Serif TC","Songti TC","PMingLiU",serif;
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);
   font-family:system-ui,-apple-system,"Segoe UI","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;font-size:15px}
+body{background-image:radial-gradient(circle at 12% -10%,#fbf3e3 0,transparent 45%),radial-gradient(circle at 100% 0,#f3e4c8 0,transparent 35%);background-attachment:fixed}
 button,input,select,textarea{font:inherit;color:inherit}
-a{color:var(--accent)}
+a{color:var(--gold-ink)}
 .hidden{display:none!important}
-main{max-width:1200px;margin:0 auto;padding:16px 14px 96px}
-h1{font-size:20px;margin:4px 0 14px}
-h2{font-size:17px;margin:22px 0 10px}
+
+/* 頂部 */
+header.top{background:linear-gradient(135deg,var(--walnut),var(--walnut2));color:#fff6e6;box-shadow:0 2px 10px rgba(80,50,20,.18)}
+header.top .in{max-width:1200px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
+header.top .brand{font-family:var(--serif);font-size:21px;font-weight:700;letter-spacing:.08em}
+header.top .tag{font-size:12px;color:#f1d9a8;letter-spacing:.3em;margin-left:2px}
+header.top .sp{flex:1}
+header.top .btn{background:rgba(255,246,230,.12);border-color:rgba(255,246,230,.35);color:#fff6e6}
+.coin{width:34px;height:34px;flex:none}
+
+main{max-width:1200px;margin:0 auto;padding:18px 14px 100px}
+h1{font-family:var(--serif);font-size:21px;margin:2px 0 14px;letter-spacing:.04em}
+h2{font-family:var(--serif);font-size:18px;margin:26px 0 8px;display:flex;align-items:center;gap:8px}
+h2::before{content:"";width:6px;height:18px;border-radius:3px;background:var(--gold)}
 .sub{color:var(--muted);font-size:13px}
 
-/* bottom nav */
-nav.tabs{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;
-  background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:20}
-nav.tabs a{flex:0 1 160px;text-align:center;padding:14px 4px;text-decoration:none;color:var(--ink2);
-  border-left:1px solid var(--line)}
-nav.tabs a:last-child{border-right:1px solid var(--line)}
-nav.tabs a.on{color:var(--accent);font-weight:700;box-shadow:inset 0 3px 0 var(--accent)}
+/* 底部分頁 */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;gap:6px;
+  background:rgba(255,250,242,.96);backdrop-filter:blur(6px);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom));z-index:20}
+nav.tabs a{flex:0 1 170px;text-align:center;padding:10px 4px;text-decoration:none;color:var(--ink2);border-radius:10px;font-weight:600}
+nav.tabs a.on{background:var(--walnut);color:#fff6e6}
+nav.tabs a.new{border:1.5px solid var(--gold);color:var(--gold-ink)}
+nav.tabs a.new.on{background:var(--gold);border-color:var(--gold);color:#fff}
 
-/* toolbar */
+/* 工具列、摘要 */
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
-.toolbar input,.toolbar select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card)}
-.toolbar input[type=search]{flex:1 1 200px}
-.summary{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}
-.tile{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px;min-width:130px}
-@media(max-width:600px){.summary{gap:6px}.tile{min-width:0;flex:1 1 30%;padding:8px 10px}.tile .v{font-size:16px}}
+.toolbar input,.toolbar select{padding:9px 11px;border:1px solid var(--line2);border-radius:10px;background:var(--card)}
+.toolbar input[type=search]{flex:1 1 220px}
+.summary{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:10px 16px;min-width:140px;box-shadow:0 1px 0 rgba(120,80,30,.05)}
 .tile .k{font-size:12px;color:var(--muted)}
-.tile .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.tile .v{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px}
+.tile.gold{background:linear-gradient(135deg,#fff6df,#f6e3b8);border-color:#e8cf95}
+.tile.gold .k{color:var(--gold-ink)}
+@media(max-width:600px){.summary{gap:6px}.tile{min-width:0;flex:1 1 30%;padding:8px 10px}.tile .v{font-size:16px}}
 
-/* main table */
-.tablewrap{overflow-x:auto;border-radius:6px;-webkit-overflow-scrolling:touch}
-table.ledger{border-collapse:separate;border-spacing:2px;min-width:980px;width:100%}
-.ledger th{background:var(--head);color:var(--head-ink);text-align:left;vertical-align:top;
-  padding:8px;font-weight:700;font-size:14px;line-height:1.3;white-space:nowrap}
-.ledger td{padding:6px 8px;font-variant-numeric:tabular-nums;white-space:nowrap;vertical-align:middle}
+/* 主表格 */
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tbox{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:4px;overflow:hidden}
+table.ledger{border-collapse:separate;border-spacing:0 3px;min-width:1000px;width:100%}
+.ledger th{background:var(--walnut);color:#fff3dd;text-align:left;vertical-align:bottom;padding:9px 9px;font-weight:600;font-size:13.5px;line-height:1.3;white-space:nowrap}
+.ledger th:first-child{border-radius:9px 0 0 9px} .ledger th:last-child{border-radius:0 9px 9px 0}
+.ledger td{padding:7px 9px;font-variant-numeric:tabular-nums;white-space:nowrap;vertical-align:middle}
 .ledger tbody tr:nth-child(odd) td{background:var(--row1)}
 .ledger tbody tr:nth-child(even) td{background:var(--row2)}
+.ledger tbody td:first-child{border-radius:9px 0 0 9px} .ledger tbody td:last-child{border-radius:0 9px 9px 0}
 .ledger tbody tr{cursor:pointer}
-.ledger tbody tr:hover td{filter:brightness(1.04)}
+.ledger tbody tr:hover td{background:#efdfc2}
 .ledger td.num{text-align:right}
-.thumb{width:64px;height:64px;border-radius:6px;object-fit:cover;display:block;background:#fff}
+.thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;display:block;background:#fff;border:1px solid var(--line)}
 .thumb.empty{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px}
-.title-cell{max-width:220px;white-space:normal;line-height:1.35}
+.title-cell{max-width:230px;white-space:normal;line-height:1.35}
 .title-cell .t{font-weight:600}
 .title-cell .meta{font-size:12px;color:var(--ink2)}
-.chip{display:inline-block;background:rgba(23,93,128,.12);color:var(--accent);border-radius:99px;padding:1px 8px;font-size:12px;margin:2px 3px 0 0}
-.unitbtn{border:1px solid var(--accent);background:#fff;color:var(--accent);border-radius:99px;padding:4px 10px;cursor:pointer}
+.chip{display:inline-block;background:var(--gold-soft);color:var(--gold-ink);border-radius:99px;padding:1px 9px;font-size:12px;margin:3px 3px 0 0}
+.unitbtn{border:1px solid var(--gold);background:#fffaf0;color:var(--gold-ink);border-radius:99px;padding:4px 11px;cursor:pointer;font-weight:600}
+.unitbtn:hover{background:var(--gold);color:#fff}
+.minis{display:flex;margin-top:4px}
+.minis img{width:22px;height:22px;border-radius:50%;object-fit:cover;border:2px solid #fff;margin-right:-6px;background:#fff}
 .pos{color:var(--good)} .neg{color:var(--bad)}
 .est{display:block;font-size:11px;color:var(--ink2)}
-.empty-state{padding:40px 10px;text-align:center;color:var(--muted)}
+.empty-state{padding:44px 10px;text-align:center;color:var(--muted)}
 
-/* forms */
+/* 表單 */
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
-label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink2)}
-label.f input,label.f select,label.f textarea{padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font-size:15px}
+.card > .cap{font-family:var(--serif);font-weight:700;font-size:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:12px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--ink2)}
+label.f input,label.f select,label.f textarea{padding:9px 10px;border:1px solid var(--line2);border-radius:9px;background:#fff;color:var(--ink);font-size:15px;min-width:0;width:100%}
+label.f input:focus,label.f select:focus,label.f textarea:focus,.toolbar input:focus{outline:2px solid var(--gold);outline-offset:-1px;border-color:var(--gold)}
 label.f textarea{min-height:60px;resize:vertical}
 .wide{grid-column:1/-1}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:9px 14px;cursor:pointer}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
-.btn.danger{color:var(--bad);border-color:#e6b8b8}
+.btn{border:1px solid var(--line2);background:#fff;border-radius:9px;padding:9px 15px;cursor:pointer}
+.btn:hover{border-color:var(--gold)}
+.btn.primary{background:var(--walnut);border-color:var(--walnut);color:#fff6e6;font-weight:700}
+.btn.primary:hover{background:var(--walnut2)}
+.btn.goldbtn{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:700}
+.btn.danger{color:var(--bad);border-color:#e7bcb0}
 .btn.small{padding:5px 10px;font-size:13px}
 .btn:disabled{opacity:.5;cursor:default}
-.imgbox{border:2px dashed var(--line);border-radius:var(--radius);min-height:160px;display:flex;align-items:center;justify-content:center;
-  flex-direction:column;gap:8px;padding:10px;text-align:center;color:var(--muted);cursor:pointer;background:#fafbfc}
-.imgbox img{max-width:100%;max-height:340px;border-radius:6px}
-.imgbox.drag{border-color:var(--accent);background:#eef5f9}
-.calc{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:12px}
-.calc div{background:#f1f4f6;border-radius:8px;padding:8px 10px}
+.imgbox{border:2px dashed var(--line2);border-radius:var(--radius);min-height:160px;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:8px;padding:10px;text-align:center;color:var(--muted);cursor:pointer;background:var(--card2)}
+.imgbox img{max-width:100%;max-height:340px;border-radius:8px}
+.imgbox.drag,.uimg.drag{border-color:var(--gold);background:#fbefd6}
+.calc{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:14px}
+.calc > div{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.calc > div.hl{background:linear-gradient(135deg,#fff6df,#f6e3b8);border-color:#e8cf95}
 .calc .k{font-size:12px;color:var(--muted)} .calc .v{font-weight:700;font-variant-numeric:tabular-nums}
-.tags-input{display:flex;flex-wrap:wrap;gap:4px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:5px 6px;background:#fff}
-.tags-input input,label.f .tags-input input{border:0;outline:0;background:none;flex:1 1 100px;padding:4px;min-width:80px}
+.tags-input{display:flex;flex-wrap:wrap;gap:4px;align-items:center;border:1px solid var(--line2);border-radius:9px;padding:5px 6px;background:#fff}
+label.f .tags-input input{border:0;outline:0;flex:1 1 100px;padding:4px;min-width:80px;width:auto;background:none}
 .tags-input .chip{cursor:pointer}
 .tags-input .chip::after{content:" ×"}
-table.units{width:100%;border-collapse:collapse;min-width:640px}
-.units th{font-size:12px;color:var(--muted);text-align:left;font-weight:600;padding:4px}
-.units td{padding:3px 4px}
-.units select{min-width:92px}
-.units input,.units select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;font-variant-numeric:tabular-nums}
-.units td.alloc{color:var(--ink2);font-size:13px;white-space:nowrap;text-align:right}
-.x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:18px;padding:2px 6px}
 
-/* modal */
-.modal-bg{position:fixed;inset:0;background:rgba(10,20,30,.45);display:flex;align-items:flex-end;justify-content:center;z-index:50}
-.modal{background:var(--card);width:min(860px,100%);max-height:92vh;overflow:auto;border-radius:14px 14px 0 0;padding:16px}
-@media(min-width:700px){.modal-bg{align-items:center}.modal{border-radius:14px}}
-.modal header{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px}
-.modal header img{width:84px;height:84px;object-fit:cover;border-radius:8px;cursor:zoom-in}
-.modal header .grow{flex:1}
+/* 每一隻：卡片 */
+.ulist{display:flex;flex-direction:column;gap:10px}
+.ucard{display:grid;grid-template-columns:120px 1fr auto;gap:12px;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px}
+.ucard.sold{border-left:4px solid var(--good)} .ucard.reserved{border-left:4px solid var(--gold)}
+.uimg{width:120px;height:120px;border:2px dashed var(--line2);border-radius:10px;display:flex;align-items:center;justify-content:center;
+  text-align:center;color:var(--muted);font-size:12px;cursor:pointer;background:#fff;overflow:hidden;position:relative}
+.uimg:focus{outline:2px solid var(--gold)}
+.uimg img{width:100%;height:100%;object-fit:cover}
+.uimg.has{border-style:solid}
+.uimgbtns{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;width:120px}
+.uimgbtns button{flex:1;font-size:11.5px;padding:4px 2px;border:1px solid var(--line2);background:#fff;border-radius:7px;cursor:pointer;white-space:nowrap}
+.ufields{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px 10px;align-content:start}
+.ufields .name{grid-column:span 2}
+.ufields .sec{grid-column:1/-1;font-size:12px;color:var(--gold-ink);font-weight:700;border-top:1px dashed var(--line2);padding-top:6px;margin-top:2px}
+.ufields .alloc{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--ink2)}
+.ufields .alloc b{padding:9px 0;font-variant-numeric:tabular-nums;color:var(--ink)}
+.ufields .alloc small{color:var(--muted)}
+.x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:18px;padding:2px 6px;align-self:start}
+.x:hover{color:var(--bad)}
+@media(max-width:620px){
+  .ucard{grid-template-columns:88px 1fr;position:relative}
+  .uimg{width:88px;height:88px} .uimgbtns{width:88px}
+  .ucard .x{position:absolute;top:4px;right:4px}
+  .ufields{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+}
 
-/* stats */
+/* 小視窗 */
+.modal-bg{position:fixed;inset:0;background:rgba(50,32,15,.45);display:flex;align-items:flex-end;justify-content:center;z-index:50}
+.modal{background:var(--card);width:min(960px,100%);max-height:94vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px}
+@media(min-width:700px){.modal-bg{align-items:center}.modal{border-radius:16px}}
+.modal .mh{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.modal .mh img{width:88px;height:88px;object-fit:cover;border-radius:10px;cursor:zoom-in;border:1px solid var(--line)}
+.modal .mh .grow{flex:1}
+.modal .mh .mt{font-family:var(--serif);font-size:17px;font-weight:700}
+.mfoot{position:sticky;bottom:-16px;background:var(--card);padding:12px 0 2px;margin-top:10px;border-top:1px solid var(--line)}
+
+/* 裁切 */
+.cropbg{position:fixed;inset:0;background:rgba(30,20,10,.82);z-index:90;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:12px}
+.cropwrap{position:relative;overflow:hidden;touch-action:none;user-select:none;max-width:96vw;max-height:78vh}
+.cropwrap img{display:block;max-width:96vw;max-height:78vh}
+.cropsel{position:absolute;border:2px solid #ffd77a;box-shadow:0 0 0 9999px rgba(0,0,0,.45);pointer-events:none}
+.crophint{color:#f5e6c8;font-size:14px}
+
+/* 統計 */
 .viz{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;position:relative}
 .legend{display:flex;gap:14px;font-size:13px;color:var(--ink2);margin-bottom:6px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
-.tip{position:absolute;pointer-events:none;background:#1b1d20;color:#fff;font-size:12px;border-radius:6px;padding:6px 9px;
-  white-space:nowrap;transform:translate(-50%,-100%);font-variant-numeric:tabular-nums;z-index:5}
+.tip{position:absolute;pointer-events:none;background:#3a2d22;color:#fff6e6;font-size:12px;border-radius:8px;padding:7px 10px;
+  white-space:nowrap;transform:translate(-50%,-100%);font-variant-numeric:tabular-nums;z-index:5;line-height:1.5}
 table.plain{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-.plain th,.plain td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.plain th,.plain td{padding:8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
 .plain th:first-child,.plain td:first-child{text-align:left}
 .plain th{font-size:12px;color:var(--muted);font-weight:600}
-.plain tr.click{cursor:pointer} .plain tr.click:hover td{background:#f1f4f6}
+.plain tr.click{cursor:pointer} .plain tr.click:hover td{background:var(--row1)}
 .bar{height:8px;border-radius:0 4px 4px 0;background:var(--series-1);min-width:2px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.seg button{border:0;background:#fff;padding:7px 12px;cursor:pointer;border-right:1px solid var(--line)}
+.bar.jade{background:var(--series-2)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px} @media(max-width:760px){.two{grid-template-columns:1fr}}
+.two h3{font-size:14px;margin:0 0 6px;color:var(--ink2)}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:10px;overflow:hidden;background:#fff}
+.seg button{border:0;background:none;padding:7px 12px;cursor:pointer;border-right:1px solid var(--line)}
 .seg button:last-child{border-right:0}
-.seg button.on{background:var(--accent);color:#fff}
-.banner{background:#fff6dd;border:1px solid #f0d78c;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px}
-.toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:#1b1d20;color:#fff;padding:9px 16px;border-radius:99px;z-index:99;font-size:14px}
-.login{max-width:360px;margin:12vh auto}
-.zoom{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:80;cursor:zoom-out}
+.seg button.on{background:var(--walnut);color:#fff6e6}
+.banner{background:#fff4d8;border:1px solid #ecd391;border-radius:10px;padding:8px 12px;font-size:13px;margin-bottom:14px}
+.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:#fff6e6;padding:9px 18px;border-radius:99px;z-index:99;font-size:14px}
+.login{max-width:360px;margin:10vh auto}
+.zoom{position:fixed;inset:0;background:rgba(20,12,5,.88);display:flex;align-items:center;justify-content:center;z-index:80;cursor:zoom-out}
 .zoom img{max-width:96vw;max-height:96vh}
 </style>
 </head>
 <body>
+<header class="top"><div class="in">
+  <svg class="coin" viewBox="0 0 40 40" aria-hidden="true">
+    <circle cx="20" cy="20" r="18" fill="#e9c470" stroke="#fff1c9" stroke-width="1.5"/>
+    <circle cx="20" cy="20" r="14.5" fill="none" stroke="#b8862f" stroke-width="1.2"/>
+    <rect x="15" y="15" width="10" height="10" rx="1" fill="#7a5230" stroke="#b8862f" stroke-width="1.2"/>
+  </svg>
+  <div><div class="brand">商品紀錄</div><div class="tag">招財進寶・生意興隆</div></div>
+  <div class="sp"></div><div id="topact"></div>
+</div></header>
 <main id="app"></main>
 <nav class="tabs hidden" id="tabs">
   <a href="#stats" data-v="stats">統計</a>
   <a href="#home" data-v="home">首頁</a>
-  <a href="#new" data-v="new">新增記錄</a>
+  <a href="#new" data-v="new" class="new">＋ 新增記錄</a>
 </nav>
 <script>
 (function(){
@@ -146,19 +216,28 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const twd = v => v == null ? '—' : (v < 0 ? '−' : '') + 'NT$' + Math.round(Math.abs(v)).toLocaleString('zh-TW');
 const jpy = v => v == null ? '—' : '¥' + Math.round(v).toLocaleString('ja-JP');
+const ymLocal = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c=='x'?r:(r&3|8)).toString(16)}));
 const STATUS = {stock:'在庫', reserved:'已預訂', sold:'已售出'};
+const METHODS = ['賣貨便','好賣+','面交','店到店','宅配／郵寄','蝦皮'];
+const PLACES = ['蝦皮','Facebook 社團','Instagram','Threads','LINE 社群','場販'];
 function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2200); }
 
 /* ---------- 計算 ---------- */
+// 實際購買價：有填用填的；沒填 = 原價 × 匯率
 function paid(p){ return p.paid_twd != null ? +p.paid_twd : (p.price_jpy != null && p.rate != null ? Math.round(p.price_jpy * p.rate) : null); }
+// 總成本 = 實際購買價 + 運費 + 手續費 − 折扣
 function cost(p){ const a = paid(p); if (a == null) return null; return a + (+p.shipping||0) + (+p.fee||0) - (+p.discount||0); }
-function soldTotal(p){ return (p.units||[]).reduce((s,u)=> s + (u.status==='sold' ? (+u.sold_price||0) : 0), 0); }
-function soldCount(p){ return (p.units||[]).filter(u=>u.status==='sold').length; }
-function expectTotal(p){ return (p.units||[]).reduce((s,u)=> s + (u.status==='sold' ? (+u.sold_price||0) : (+u.list_price||0)), 0); }
-function profit(p){ const c = cost(p); return c == null ? null : soldTotal(p) - c; }
-// 每隻分攤成本：每隻都有日幣價就照日幣價比例，否則平均
+const sold = u => u.status === 'sold';
+function soldTotal(p){ return (p.units||[]).reduce((s,u)=> s + (sold(u) ? (+u.sold_price||0) : 0), 0); }
+function taxTotal(p){ return (p.units||[]).reduce((s,u)=> s + (sold(u) ? (+u.tax||0) : 0), 0); }
+function soldCount(p){ return (p.units||[]).filter(sold).length; }
+function expectTotal(p){ return (p.units||[]).reduce((s,u)=> s + (sold(u) ? (+u.sold_price||0) : (+u.list_price||0)), 0); }
+// 利潤 = 已賣出 − 總成本 − 已賣出那幾隻的稅金
+function profit(p){ const c = cost(p); return c == null ? null : soldTotal(p) - c - taxTotal(p); }
+function expectProfit(p){ const c = cost(p); return c == null ? null : expectTotal(p) - c - taxTotal(p); }
+// 每隻分攤成本：把「總成本」分給每一隻。每隻都有日幣價 → 照日幣價比例；否則平均。
 function alloc(p, units){
   units = units || p.units || []; const c = cost(p);
   if (c == null || !units.length) return units.map(()=>null);
@@ -166,21 +245,59 @@ function alloc(p, units){
   const w = units.map(u => all ? +u.price_jpy : 1); const W = w.reduce((a,b)=>a+b,0);
   return w.map(x => c * x / W);
 }
+const allocMode = units => units.length && units.every(u=>+u.price_jpy>0) ? '依每隻日幣價比例分攤總成本' : '總成本平均分攤（每隻都填日幣價就會改按比例）';
 
-/* ---------- 圖片壓縮 ---------- */
+/* ---------- 圖片 ---------- */
+async function loadImg(src){
+  return await new Promise((res,rej)=>{ const i=new Image(); if (/^https?:/.test(src)) i.crossOrigin='anonymous'; i.onload=()=>res(i); i.onerror=rej; i.src=src; });
+}
+async function canvasBlob(c, q){
+  const b = await new Promise(r => c.toBlob(r, 'image/webp', q));
+  if (b && b.type === 'image/webp') return b;
+  return await new Promise(r => c.toBlob(r, 'image/jpeg', q));
+}
 async function compress(file, maxSide, q){
   const url = URL.createObjectURL(file);
   try{
-    const img = await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; });
+    const img = await loadImg(url);
     const s = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
     const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth*s); c.height = Math.round(img.naturalHeight*s);
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    const blob = await new Promise(r => c.toBlob(r, 'image/webp', q));
-    if (blob && blob.type === 'image/webp') return blob;
-    return await new Promise(r => c.toBlob(r, 'image/jpeg', q));
+    return await canvasBlob(c, q);
   } finally { URL.revokeObjectURL(url); }
 }
 const blobToDataURL = b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); });
+
+// 從主圖框選一塊當作這一隻的圖片
+function cropFrom(src){
+  return new Promise(resolve => {
+    const bg = document.createElement('div'); bg.className = 'cropbg';
+    bg.innerHTML = `<div class="crophint">在圖上拖曳，框出這一隻</div>
+      <div class="cropwrap"><img alt=""><div class="cropsel hidden"></div></div>
+      <div class="row"><button class="btn" data-a="no">取消</button><button class="btn goldbtn" data-a="ok" disabled>使用這個範圍</button></div>`;
+    document.body.appendChild(bg);
+    const img = $('img', bg), sel = $('.cropsel', bg), wrap = $('.cropwrap', bg), ok = $('[data-a=ok]', bg);
+    if (/^https?:/.test(src)) img.crossOrigin = 'anonymous';
+    img.src = src;
+    let r = null, st = null;
+    const pt = e => { const b = img.getBoundingClientRect(); return { x: Math.max(0, Math.min(b.width, e.clientX - b.left)), y: Math.max(0, Math.min(b.height, e.clientY - b.top)) }; };
+    const show = () => { Object.assign(sel.style, { left:r.x+'px', top:r.y+'px', width:r.w+'px', height:r.h+'px' }); sel.classList.remove('hidden'); };
+    wrap.onpointerdown = e => { e.preventDefault(); wrap.setPointerCapture(e.pointerId); st = pt(e); r = { x:st.x, y:st.y, w:0, h:0 }; show(); };
+    wrap.onpointermove = e => { if (!st) return; const q = pt(e); r = { x:Math.min(st.x,q.x), y:Math.min(st.y,q.y), w:Math.abs(q.x-st.x), h:Math.abs(q.y-st.y) }; show(); };
+    wrap.onpointerup = () => { st = null; ok.disabled = !(r && r.w > 8 && r.h > 8); };
+    const done = v => { bg.remove(); resolve(v); };
+    $('[data-a=no]', bg).onclick = () => done(null);
+    ok.onclick = async () => {
+      const k = img.naturalWidth / img.getBoundingClientRect().width;
+      const sw = r.w*k, sh = r.h*k, s = Math.min(1, 900 / Math.max(sw, sh));
+      const c = document.createElement('canvas'); c.width = Math.round(sw*s); c.height = Math.round(sh*s);
+      c.getContext('2d').drawImage(img, r.x*k, r.y*k, sw, sh, 0, 0, c.width, c.height);
+      try { done(await canvasBlob(c, .88)); }
+      catch(e){ toast('這張圖是外部網址，瀏覽器不允許裁切，請改用上傳'); done(null); }
+    };
+    img.onerror = () => { toast('主圖載入失敗'); done(null); };
+  });
+}
 
 /* ---------- 資料層：本機 ---------- */
 const LocalStore = {
@@ -189,17 +306,28 @@ const LocalStore = {
   _write(d){ try { localStorage.setItem(this.KEY, JSON.stringify(d)); } catch(e){ toast('本機空間不足，請刪掉部分圖片或改用 Supabase'); throw e; } },
   async init(){ if (!this._read()) this._write(demoData()); return true; },
   async list(){ return this._read(); },
+  async _units(pid, units){
+    const out = [];
+    for (const [i,u0] of units.entries()) {
+      const u = {...u0, purchase_id:pid, sort:i};
+      if (u._blob) u.image_data = await blobToDataURL(await compress(u._blob, 360, .72));
+      else if (u._clear) u.image_data = null;
+      delete u._blob; delete u._clear; delete u._preview; out.push(u);
+    }
+    return out;
+  },
   async save(p, units, imgBlob){
-    const d = this._read(); p = {...p};
+    p = {...p};
     if (imgBlob) { p.image_data = await blobToDataURL(await compress(imgBlob, 640, .72)); p.image_url = null; }
-    p.units = units.map((u,i)=>({...u, purchase_id:p.id, sort:i}));
+    p.units = await this._units(p.id, units);
     p.updated_at = new Date().toISOString();
+    const d = this._read();
     const i = d.findIndex(x=>x.id===p.id); if (i>=0) d[i] = {...d[i], ...p}; else d.unshift({...p, created_at:p.updated_at});
     this._write(d); return p;
   },
-  async saveUnits(pid, units){ const d=this._read(); const p=d.find(x=>x.id===pid); p.units=units.map((u,i)=>({...u,purchase_id:pid,sort:i})); this._write(d); },
+  async saveUnits(pid, units){ const d=this._read(); const p=d.find(x=>x.id===pid); p.units = await this._units(pid, units); this._write(d); },
   async remove(id){ this._write(this._read().filter(x=>x.id!==id)); },
-  async imageUrls(list){ const m={}; list.forEach(p=>{ m[p.id] = p.image_data || p.image_url || null; }); return m; },
+  async imageUrls(list){ const m={}; list.forEach(p=>{ m[p.id] = p.image_data || p.image_url || null; (p.units||[]).forEach(u => { m[u.id] = u.image_data || null; }); }); return m; },
   async clearImage(p){ p.image_data = null; },
   exportAll(){ return this._read(); },
   importAll(d){ this._write(d); }
@@ -219,61 +347,79 @@ const SupaStore = {
     if (error) throw error;
     data.forEach(p => p.units.sort((a,b)=>a.sort-b.sort)); return data;
   },
+  async _upload(blob, prefix){
+    const ext = blob.type === 'image/webp' ? 'webp' : 'jpg';
+    const path = `${prefix}-${Date.now().toString(36)}.${ext}`;
+    const { error } = await this.sb.storage.from('item-photos').upload(path, blob, { contentType: blob.type });
+    if (error) throw error; return path;
+  },
+  _rm(paths){ paths = paths.filter(Boolean); if (paths.length) this.sb.storage.from('item-photos').remove(paths); },
   async save(p, units, imgBlob){
     p = {...p}; delete p.units; delete p.image_data;
     let oldPath = null;
     if (imgBlob) {
-      const blob = await compress(imgBlob, 1400, .85);
-      const ext = blob.type === 'image/webp' ? 'webp' : 'jpg';
-      const path = `${p.purchase_date.slice(0,7)}/${p.id}-${Date.now().toString(36)}.${ext}`;
-      const { error } = await this.sb.storage.from('item-photos').upload(path, blob, { contentType: blob.type });
-      if (error) throw error;
+      const path = await this._upload(await compress(imgBlob, 1400, .85), `${p.purchase_date.slice(0,7)}/${p.id}`);
       oldPath = p.image_path; p.image_path = path; p.image_url = null;
     }
     const { error: e1 } = await this.sb.from('purchases').upsert(p); if (e1) throw e1;
     await this.saveUnits(p.id, units);
-    if (oldPath) this.sb.storage.from('item-photos').remove([oldPath]);
+    if (oldPath) this._rm([oldPath]);
     return p;
   },
   async saveUnits(pid, units){
-    const rows = units.map((u,i)=>({ id:u.id, purchase_id:pid, sort:i, name:u.name||'', price_jpy:num(u.price_jpy), list_price:num(u.list_price),
-      status:u.status||'stock', sold_price:num(u.sold_price), sold_date:u.sold_date||null, buyer:u.buyer||null }));
-    const keep = rows.map(r=>r.id);
+    const { data: before } = await this.sb.from('units').select('id,image_path').eq('purchase_id', pid);
+    const drop = [];
+    const rows = [];
+    for (const [i,u] of units.entries()) {
+      let image_path = u.image_path || null;
+      if (u._blob) { if (image_path) drop.push(image_path); image_path = await this._upload(await compress(u._blob, 900, .85), `units/${pid}/${u.id}`); }
+      else if (u._clear) { if (image_path) drop.push(image_path); image_path = null; }
+      rows.push({ id:u.id, purchase_id:pid, sort:i, name:u.name||'', image_path, price_jpy:num(u.price_jpy), list_price:num(u.list_price),
+        status:u.status||'stock', sold_price:num(u.sold_price), tax:num(u.tax), sold_date:u.sold_date||null,
+        sold_place:u.sold_place||null, trade_method:u.trade_method||null, buyer:u.buyer||null });
+    }
+    const keep = new Set(rows.map(r=>r.id));
+    (before||[]).forEach(b => { if (!keep.has(b.id)) drop.push(b.image_path); });
     let q = this.sb.from('units').delete().eq('purchase_id', pid);
-    if (keep.length) q = q.not('id', 'in', `(${keep.join(',')})`);
+    if (keep.size) q = q.not('id', 'in', `(${[...keep].join(',')})`);
     const { error: e0 } = await q; if (e0) throw e0;
     if (rows.length) { const { error } = await this.sb.from('units').upsert(rows); if (error) throw error; }
+    this._rm(drop);
   },
   async remove(id){
-    const { data } = await this.sb.from('purchases').select('image_path').eq('id', id).single();
+    const { data } = await this.sb.from('purchases').select('image_path, units(image_path)').eq('id', id).single();
     const { error } = await this.sb.from('purchases').delete().eq('id', id); if (error) throw error;
-    if (data && data.image_path) this.sb.storage.from('item-photos').remove([data.image_path]);
+    if (data) this._rm([data.image_path, ...(data.units||[]).map(u=>u.image_path)]);
   },
   async imageUrls(list){
     const m = {}, need = [], now = Date.now();
-    list.forEach(p => {
-      if (p.image_path) { const c = this.urlCache[p.image_path]; if (c && c.exp > now) m[p.id] = c.url; else need.push(p); }
-      else m[p.id] = p.image_url || null;
+    const objs = list.flatMap(p => [p, ...(p.units||[])]);
+    objs.forEach(o => {
+      if (o.image_path) { const c = this.urlCache[o.image_path]; if (c && c.exp > now) m[o.id] = c.url; else need.push(o); }
+      else m[o.id] = o.image_url || null;
     });
-    if (need.length) {
-      const { data } = await this.sb.storage.from('item-photos').createSignedUrls(need.map(p=>p.image_path), 3600);
-      (data||[]).forEach((r,i) => { if (r.signedUrl) { this.urlCache[need[i].image_path] = { url:r.signedUrl, exp: now + 3300e3 }; m[need[i].id] = r.signedUrl; } });
+    for (let i = 0; i < need.length; i += 200) {
+      const part = need.slice(i, i+200);
+      const { data } = await this.sb.storage.from('item-photos').createSignedUrls(part.map(o=>o.image_path), 3600);
+      (data||[]).forEach((r,j) => { if (r.signedUrl) { this.urlCache[part[j].image_path] = { url:r.signedUrl, exp: now + 3300e3 }; m[part[j].id] = r.signedUrl; } });
     }
     return m;
   },
-  async clearImage(p){ if (p.image_path) { await this.sb.storage.from('item-photos').remove([p.image_path]); } p.image_path = null; }
+  async clearImage(p){ if (p.image_path) this._rm([p.image_path]); p.image_path = null; }
 };
 
 function demoData(){
-  const ym = (k) => { const d = new Date(); d.setMonth(d.getMonth()-k); return d.toISOString().slice(0,7); };
+  const ym = (k) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth()-k); return ymLocal(d); };
   const mk = (k, day, title, tags, jp, rate, ship, fee, disc, units) => ({ id: uuid(), title, source_url:'https://jp.mercari.com/', image_url:null,
     purchase_date: `${ym(k)}-${day}`, price_jpy: jp, rate, paid_twd: null, shipping: ship, fee, discount: disc, tags, note:'範例資料',
-    units: units.map((u,i)=>({ id:uuid(), sort:i, name:u[0], price_jpy:u[1], list_price:u[2], status:u[3], sold_price:u[4]??null, sold_date: u[3]==='sold' ? `${ym(Math.max(0,k-1))}-15` : null })) });
+    units: units.map((u,i)=>({ id:uuid(), sort:i, name:u[0], price_jpy:u[1], list_price:u[2], status:u[3], sold_price:u[4]??null, tax:u[5]??null,
+      sold_place: u[3]==='sold' ? u[6] : null, trade_method: u[3]!=='stock' ? u[7] : null,
+      sold_date: u[3]==='sold' ? `${ym(Math.max(0,k-1))}-15` : null })) });
   return [
-    mk(0,'05','暗殺教室 赤羽業 娃娃 3 隻組',['暗殺教室','娃娃'],5400,.212,180,30,0,[['業 A',1800,520,'sold',520],['業 B',1800,520,'reserved'],['渚',1800,480,'stock']]),
-    mk(1,'12','ぬい 2 隻＋徽章',['娃娃','徽章'],3800,.214,150,0,50,[['娃娃 1',1500,420,'sold',450],['娃娃 2',1500,420,'sold',420],['徽章',800,220,'stock']]),
-    mk(2,'20','壓克力立牌',['立牌'],2200,.216,90,30,0,[['立牌',2200,560,'sold',560]]),
-    mk(3,'03','福袋 5 隻',['娃娃','福袋'],9000,.218,260,60,100,[['1',null,480,'sold',480],['2',null,480,'sold',500],['3',null,480,'sold',480],['4',null,480,'stock'],['5',null,480,'stock']])
+    mk(0,'05','暗殺教室 赤羽業 娃娃 3 隻組',['暗殺教室','娃娃'],5400,.212,180,30,0,[['業 A',1800,520,'sold',520,0,'Threads','賣貨便'],['業 B',1800,520,'reserved',null,null,null,'面交'],['渚',1800,480,'stock']]),
+    mk(1,'12','ぬい 2 隻＋徽章',['娃娃','徽章'],3800,.214,150,0,50,[['娃娃 1',1500,420,'sold',450,0,'Facebook 社團','賣貨便'],['娃娃 2',1500,420,'sold',420,0,'場販','面交'],['徽章',800,220,'stock']]),
+    mk(2,'20','壓克力立牌',['立牌'],2200,.216,90,30,0,[['立牌',2200,560,'sold',560,28,'蝦皮','店到店']]),
+    mk(3,'03','福袋 5 隻',['娃娃','福袋'],9000,.218,260,60,100,[['1',null,480,'sold',480,24,'蝦皮','店到店'],['2',null,480,'sold',500,0,'Threads','賣貨便'],['3',null,480,'sold',480,0,'場販','面交'],['4',null,480,'stock'],['5',null,480,'stock']])
   ];
 }
 
@@ -283,6 +429,7 @@ const ui = { q:'', tag:'', month:'', range:'12', sort:'date' };
 
 async function reload(){ items = await store.list(); imgs = await store.imageUrls(items); }
 function allTags(){ const s = new Map(); items.forEach(p => (p.tags||[]).forEach(t => s.set(t, (s.get(t)||0)+1))); return [...s.entries()].sort((a,b)=>b[1]-a[1]).map(x=>x[0]); }
+function suggest(key, presets){ const s = new Set(presets); items.forEach(p => (p.units||[]).forEach(u => { if (u[key]) s.add(u[key]); })); return [...s]; }
 
 /* ---------- 路由 ---------- */
 async function route(){
@@ -302,7 +449,7 @@ function filtered(){
   let list = items.filter(p => {
     if (ui.tag && !(p.tags||[]).includes(ui.tag)) return false;
     if (ui.month && !String(p.purchase_date).startsWith(ui.month)) return false;
-    if (q) { const hay = [p.title, p.note, p.source_url, ...(p.tags||[]), ...(p.units||[]).map(u=>u.name+' '+(u.buyer||''))].join(' ').toLowerCase(); if (!hay.includes(q)) return false; }
+    if (q) { const hay = [p.title, p.note, p.source_url, ...(p.tags||[]), ...(p.units||[]).map(u=>[u.name,u.buyer,u.sold_place,u.trade_method].join(' '))].join(' ').toLowerCase(); if (!hay.includes(q)) return false; }
     return true;
   });
   const by = { date: (a,b) => String(b.purchase_date).localeCompare(String(a.purchase_date)),
@@ -317,15 +464,12 @@ function renderHome(){
   $('#app').innerHTML = `
     ${store.mode==='local' ? `<div class="banner">本機模式：資料只存在這台裝置的瀏覽器。在 config.js 填入 Supabase 設定即可改用雲端。
       <button class="btn small" id="exp">匯出 JSON</button> <button class="btn small" id="imp">匯入 JSON</button></div>` : ''}
-    <div class="row" style="justify-content:space-between"><h1>目前的紀錄</h1>
-      ${store.mode==='supabase' ? '<button class="btn small" id="logout">登出</button>' : ''}</div>
+    <h1>目前的紀錄</h1>
     <div class="toolbar">
-      <input type="search" id="q" placeholder="搜尋名稱、標籤、買家…" value="${esc(ui.q)}">
+      <input type="search" id="q" placeholder="搜尋名稱、標籤、買家、售出位置…" value="${esc(ui.q)}">
       <select id="tag"><option value="">全部標籤</option>${tags.map(t=>`<option ${t===ui.tag?'selected':''}>${esc(t)}</option>`).join('')}</select>
       <select id="month"><option value="">全部月份</option>${months.map(m=>`<option ${m===ui.month?'selected':''}>${m}</option>`).join('')}</select>
-      <select id="sort">
-        <option value="date">依購買日</option><option value="profit">依利潤</option><option value="cost">依成本</option><option value="unsold">未售出多的在前</option>
-      </select>
+      <select id="sort"><option value="date">依購買日</option><option value="profit">依利潤</option><option value="cost">依成本</option><option value="unsold">未售出多的在前</option></select>
     </div>
     <div id="list"></div>`;
   $('#sort').value = ui.sort;
@@ -334,7 +478,6 @@ function renderHome(){
   $('#tag').onchange = e => { ui.tag = e.target.value; renderList(); };
   $('#month').onchange = e => { ui.month = e.target.value; renderList(); };
   $('#sort').onchange = e => { ui.sort = e.target.value; renderList(); };
-  if ($('#logout')) $('#logout').onclick = async () => { await store.logout(); location.reload(); };
   if ($('#exp')) $('#exp').onclick = () => { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(store.exportAll(),null,1)],{type:'application/json'})); a.download=`item-ledger-${today()}.json`; a.click(); };
   if ($('#imp')) $('#imp').onclick = () => { const i=document.createElement('input'); i.type='file'; i.accept='.json'; i.onchange=async()=>{ try{ const d=JSON.parse(await i.files[0].text()); if(!Array.isArray(d)) throw 0; if(!confirm(`匯入 ${d.length} 筆，會取代目前本機資料？`)) return; store.importAll(d); await reload(); renderHome(); }catch(e){ toast('檔案格式不對'); } }; i.click(); };
   renderList();
@@ -342,33 +485,35 @@ function renderHome(){
 
 function renderList(){
   const list = filtered();
-  const tc = list.reduce((s,p)=>s+(cost(p)||0),0), ts = list.reduce((s,p)=>s+soldTotal(p),0);
+  const tc = list.reduce((s,p)=>s+(cost(p)||0),0), ts = list.reduce((s,p)=>s+soldTotal(p),0), tx = list.reduce((s,p)=>s+taxTotal(p),0);
   const nu = list.reduce((s,p)=>s+(p.units||[]).length,0), ns = list.reduce((s,p)=>s+soldCount(p),0);
+  const pf = ts - tc - tx;
   $('#list').innerHTML = `
     <div class="summary">
       <div class="tile"><div class="k">筆數 / 隻數</div><div class="v">${list.length} / ${nu}</div></div>
       <div class="tile"><div class="k">總成本</div><div class="v">${twd(tc)}</div></div>
-      <div class="tile"><div class="k">已賣出</div><div class="v">${twd(ts)}</div></div>
-      <div class="tile"><div class="k">利潤</div><div class="v ${ts-tc>=0?'pos':'neg'}">${twd(ts-tc)}</div></div>
+      <div class="tile"><div class="k">已賣出${tx?`（稅 ${twd(tx)}）`:''}</div><div class="v">${twd(ts)}</div></div>
+      <div class="tile gold"><div class="k">利潤</div><div class="v ${pf>=0?'pos':'neg'}">${twd(pf)}</div></div>
       <div class="tile"><div class="k">售出</div><div class="v">${ns} / ${nu}</div></div>
     </div>
-    ${list.length ? `<div class="tablewrap"><table class="ledger">
+    ${list.length ? `<div class="tbox"><div class="tablewrap"><table class="ledger">
       <thead><tr><th>商品<br>縮圖</th><th>名稱</th><th>原價<br>(日幣)</th><th>實際<br>購買價</th><th>運費</th><th>手續費</th><th>折扣</th>
         <th>總成本</th><th>每隻定價</th><th>總賣出價</th><th>利潤</th></tr></thead>
-      <tbody>${list.map(rowHTML).join('')}</tbody></table></div>`
+      <tbody>${list.map(rowHTML).join('')}</tbody></table></div></div>`
       : `<div class="empty-state">${items.length ? '沒有符合條件的紀錄' : '還沒有紀錄，按下方「新增記錄」開始'}</div>`}`;
   $$('.ledger tbody tr').forEach(tr => tr.onclick = e => {
-    if (e.target.closest('.unitbtn')) { openUnits(tr.dataset.id); return; }
+    if (e.target.closest('.unitbtn, .minis')) { openUnits(tr.dataset.id); return; }
     if (e.target.closest('a')) return;
     location.hash = 'edit/' + tr.dataset.id;
   });
 }
 
 function rowHTML(p){
-  const c = cost(p), st = soldTotal(p), pr = profit(p), n = (p.units||[]).length, ns = soldCount(p);
-  const left = n - ns, est = c == null ? null : expectTotal(p) - c;
+  const c = cost(p), st = soldTotal(p), tx = taxTotal(p), pr = profit(p), n = (p.units||[]).length, ns = soldCount(p);
+  const est = expectProfit(p);
   const prices = (p.units||[]).map(u=>+u.list_price).filter(x=>x>0);
   const pr0 = prices.length ? (Math.min(...prices)===Math.max(...prices) ? twd(prices[0]) : `${twd(Math.min(...prices))}–${Math.max(...prices).toLocaleString()}`) : '';
+  const minis = (p.units||[]).map(u=>imgs[u.id]).filter(Boolean).slice(0,6);
   const img = imgs[p.id];
   return `<tr data-id="${p.id}">
     <td>${img ? `<img class="thumb" src="${esc(img)}" alt="" loading="lazy">` : '<div class="thumb empty">無圖</div>'}</td>
@@ -381,79 +526,128 @@ function rowHTML(p){
     <td class="num">${p.fee ? twd(p.fee) : '—'}</td>
     <td class="num">${p.discount ? '−'+twd(p.discount) : '—'}</td>
     <td class="num"><b>${twd(c)}</b></td>
-    <td><button class="unitbtn">${n} 隻 ▸</button><span class="est">${pr0}</span></td>
-    <td class="num">${twd(st)}<span class="est">售出 ${ns}/${n}</span></td>
-    <td class="num"><b class="${pr==null?'':pr>=0?'pos':'neg'}">${twd(pr)}</b>${left>0 && est!=null ? `<span class="est">全賣完 ${twd(est)}</span>`:''}</td>
+    <td><button class="unitbtn">${n} 隻 ▸</button><span class="est">${pr0}</span>${minis.length ? `<div class="minis">${minis.map(s=>`<img src="${esc(s)}" alt="" loading="lazy">`).join('')}</div>` : ''}</td>
+    <td class="num">${twd(st)}<span class="est">售出 ${ns}/${n}${tx?` · 稅 ${twd(tx)}`:''}</span></td>
+    <td class="num"><b class="${pr==null?'':pr>=0?'pos':'neg'}">${twd(pr)}</b>${n-ns>0 && est!=null ? `<span class="est">全賣完 ${twd(est)}</span>`:''}</td>
   </tr>`;
 }
+
+/* ---------- 每一隻（卡片） ---------- */
+const newUnit = () => ({ id: uuid(), name:'', price_jpy:null, list_price:null, status:'stock', sold_price:null, tax:null, sold_date:null, sold_place:'', trade_method:'', buyer:'' });
+const unitImg = u => u._clear ? null : (u._preview || imgs[u.id] || null);
+
+function unitsHTML(units, al){
+  const pl = suggest('sold_place', PLACES), me = suggest('trade_method', METHODS);
+  return `<datalist id="dl-place">${pl.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <datalist id="dl-method">${me.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <div class="ulist">${units.map((u,i)=>{ const im = unitImg(u); const saleOn = u.status !== 'stock'; return `
+    <div class="ucard ${u.status}" data-i="${i}">
+      <div><div class="uimg ${im?'has':''}" tabindex="0" title="點擊上傳，或選取後 Ctrl+V 貼上">${im ? `<img src="${esc(im)}" alt="">` : '＋ 圖片<br>點擊／拖曳／貼上'}</div>
+        <div class="uimgbtns"><button type="button" data-a="crop">從主圖裁切</button>${im ? '<button type="button" data-a="rm">移除</button>' : ''}</div></div>
+      <div class="ufields">
+        <label class="f name">名稱<input data-k="name" value="${esc(u.name)}" placeholder="第 ${i+1} 隻"></label>
+        <label class="f">狀態<select data-k="status">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${u.status===k?'selected':''}>${v}</option>`).join('')}</select></label>
+        <label class="f">日幣價<input data-k="price_jpy" type="number" inputmode="numeric" value="${u.price_jpy??''}" placeholder="用來分攤"></label>
+        <div class="alloc">分攤成本<b data-alloc>${al[i]==null?'—':twd(al[i])}</b></div>
+        <label class="f">定價<input data-k="list_price" type="number" inputmode="numeric" value="${u.list_price??''}"></label>
+        ${saleOn ? `<div class="sec">${u.status==='sold'?'售出資訊':'預訂資訊'}</div>
+        ${u.status==='sold' ? `<label class="f">賣出價<input data-k="sold_price" type="number" inputmode="numeric" value="${u.sold_price??''}"></label>
+        <label class="f">稅金（如有）<input data-k="tax" type="number" inputmode="numeric" value="${u.tax??''}" placeholder="0"></label>
+        <label class="f">售出日期<input data-k="sold_date" type="date" value="${u.sold_date??''}"></label>
+        <label class="f">售出位置<input data-k="sold_place" list="dl-place" value="${esc(u.sold_place||'')}" placeholder="蝦皮、社團、場販…"></label>` : ''}
+        <label class="f">交易方式<input data-k="trade_method" list="dl-method" value="${esc(u.trade_method||'')}" placeholder="賣貨便、面交…"></label>
+        <label class="f">買家<input data-k="buyer" value="${esc(u.buyer||'')}"></label>
+        ${u.status==='sold' ? `<div class="alloc">這隻利潤<b data-uprofit>${al[i]==null||u.sold_price==null?'—':twd(u.sold_price-(+u.tax||0)-al[i])}</b></div>` : ''}` : ''}
+      </div>
+      <button type="button" class="x" data-del="${i}" aria-label="刪除這隻">✕</button>
+    </div>`; }).join('')}</div>
+    ${units.length ? '' : '<div class="sub" style="padding:8px">還沒有加入任何一隻</div>'}`;
+}
+
+// root：容器；getP()：取得目前的 purchase（算分攤）；getMain()：主圖網址（裁切用）
+function bindUnits(root, units, redraw, getP, getMain, onChange){
+  const refreshAlloc = () => {
+    const al = alloc(getP(), units);
+    $$('.ucard', root).forEach(card => { const i = +card.dataset.i, u = units[i];
+      const a = $('[data-alloc]', card); if (a) a.textContent = al[i]==null ? '—' : twd(al[i]);
+      const up = $('[data-uprofit]', card); if (up) up.textContent = al[i]==null||u.sold_price==null ? '—' : twd(u.sold_price-(+u.tax||0)-al[i]); });
+    onChange && onChange();
+  };
+  $$('.ucard', root).forEach(card => {
+    const i = +card.dataset.i, u = units[i];
+    $$('input,select', card).forEach(el => {
+      const ev = el.tagName === 'SELECT' ? 'change' : 'input';
+      el.addEventListener(ev, () => {
+        const k = el.dataset.k;
+        u[k] = ['price_jpy','list_price','sold_price','tax'].includes(k) ? num(el.value) : el.value;
+        if (k === 'status') {
+          if (el.value === 'sold') { if (u.sold_price == null) u.sold_price = u.list_price; if (!u.sold_date) u.sold_date = today(); }
+          redraw();
+        } else refreshAlloc();
+      });
+    });
+    const box = $('.uimg', card);
+    const setBlob = b => { if (!b || !b.type.startsWith('image/')) return; u._blob = b; u._clear = false; if (u._preview) URL.revokeObjectURL(u._preview); u._preview = URL.createObjectURL(b); redraw(); };
+    box._setBlob = setBlob;
+    box.onclick = () => { const f = document.createElement('input'); f.type='file'; f.accept='image/*'; f.onchange = () => setBlob(f.files[0]); f.click(); };
+    box.ondragover = e => { e.preventDefault(); box.classList.add('drag'); };
+    box.ondragleave = () => box.classList.remove('drag');
+    box.ondrop = e => { e.preventDefault(); box.classList.remove('drag'); setBlob(e.dataTransfer.files[0]); };
+    const crop = $('[data-a=crop]', card);
+    crop.onclick = async () => { const src = getMain(); if (!src) { toast('這筆還沒有主圖'); return; } const b = await cropFrom(src); if (b) setBlob(b); };
+    const rm = $('[data-a=rm]', card);
+    if (rm) rm.onclick = () => { u._blob = null; u._preview = null; u._clear = true; redraw(); };
+  });
+  $$('[data-del]', root).forEach(b => b.onclick = () => { const u = units[+b.dataset.del]; if ((u.name || u.sold_price != null) && !confirm(`刪除「${u.name||'這隻'}」？`)) return; units.splice(+b.dataset.del, 1); redraw(); });
+}
+
+// 貼上：焦點在某隻的圖片框 → 給那一隻；否則在表單頁 → 主圖
+document.addEventListener('paste', e => {
+  const it = [...(e.clipboardData?.items||[])].find(i=>i.type.startsWith('image/')); if (!it) return;
+  const box = document.activeElement && document.activeElement.closest && document.activeElement.closest('.uimg');
+  if (box && box._setBlob) { e.preventDefault(); box._setBlob(it.getAsFile()); toast('已貼到這一隻'); return; }
+  if (window.__mainPaste) { e.preventDefault(); window.__mainPaste(it.getAsFile()); toast('已貼上主圖'); }
+});
 
 /* ---------- 每隻定價小視窗 ---------- */
 function openUnits(id){
   const p = items.find(x=>x.id===id); if (!p) return;
   let units = (p.units||[]).map(u=>({...u}));
   const bg = document.createElement('div'); bg.className = 'modal-bg';
+  const close = () => { bg.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape' && !$('.cropbg')) close(); };
+  document.addEventListener('keydown', onKey);
+  const head = () => {
+    const st = units.reduce((s,u)=>s+(sold(u)?(+u.sold_price||0):0),0), tx = units.reduce((s,u)=>s+(sold(u)?(+u.tax||0):0),0);
+    return `${twd(cost(p))} 總成本 · 已賣 ${twd(st)}${tx?`（稅 ${twd(tx)}）`:''} · 利潤 <b class="${st-tx-(cost(p)||0)>=0?'pos':'neg'}">${twd(st-tx-(cost(p)||0))}</b>`;
+  };
   const draw = () => {
-    const al = alloc(p, units);
-    const st = units.reduce((s,u)=>s+(u.status==='sold'?(+u.sold_price||0):0),0);
     bg.innerHTML = `<div class="modal">
-      <header>${imgs[p.id] ? `<img src="${esc(imgs[p.id])}" id="zoomimg" alt="">` : ''}
-        <div class="grow"><b>${esc(p.title||'(未命名)')}</b><div class="sub">${esc(p.purchase_date)} · 總成本 ${twd(cost(p))} · 已賣 ${twd(st)}
-          ${p.source_url ? ` · <a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>`:''}</div>
-          <div class="sub">分攤成本：${units.length && units.every(u=>+u.price_jpy>0) ? '依每隻日幣價比例' : '平均分攤（每隻都填日幣價就會改按比例）'}</div></div>
-        <button class="x" id="close" aria-label="關閉">✕</button></header>
-      <div class="tablewrap">${unitsTableHTML(units, al)}</div>
-      <div class="row" style="margin-top:10px;justify-content:space-between">
+      <div class="mh">${imgs[p.id] ? `<img src="${esc(imgs[p.id])}" id="zoomimg" alt="">` : ''}
+        <div class="grow"><div class="mt">${esc(p.title||'(未命名)')}</div>
+          <div class="sub">${esc(p.purchase_date)}${p.source_url ? ` · <a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>`:''}</div>
+          <div style="margin-top:4px" id="mhsum">${head()}</div>
+          <div class="sub" id="mhmode">${allocMode(units)}</div></div>
+        <button class="x" id="close" aria-label="關閉">✕</button></div>
+      <div id="uw">${unitsHTML(units, alloc(p, units))}</div>
+      <div class="row mfoot" style="justify-content:space-between">
         <button class="btn small" id="addu">＋ 加一隻</button>
         <div class="row"><button class="btn" id="cancel">取消</button><button class="btn primary" id="saveu">儲存</button></div></div>
     </div>`;
-    bindUnitsTable(bg, units, draw);
+    bindUnits($('#uw', bg), units, draw, () => p, () => imgs[p.id], () => { $('#mhsum', bg).innerHTML = head(); $('#mhmode', bg).textContent = allocMode(units); });
     $('#addu', bg).onclick = () => { units.push(newUnit()); draw(); };
-    $('#close', bg).onclick = $('#cancel', bg).onclick = () => bg.remove();
+    $('#close', bg).onclick = $('#cancel', bg).onclick = close;
     if ($('#zoomimg', bg)) $('#zoomimg', bg).onclick = () => zoom(imgs[p.id]);
     $('#saveu', bg).onclick = async (e) => {
-      e.target.disabled = true;
-      try { await store.saveUnits(p.id, units); await reload(); bg.remove(); toast('已儲存'); route(); }
-      catch(err){ console.error(err); toast('儲存失敗：' + (err.message||err)); e.target.disabled = false; }
+      e.target.disabled = true; e.target.textContent = '儲存中…';
+      try { await store.saveUnits(p.id, units); await reload(); close(); toast('已儲存'); route(); }
+      catch(err){ console.error(err); toast('儲存失敗：' + (err.message||err)); e.target.disabled = false; e.target.textContent = '儲存'; }
     };
   };
-  bg.addEventListener('alloc', () => { const al = alloc(p, units); $$('td.alloc', bg).forEach((td,i)=> td.textContent = al[i]==null ? '—' : twd(al[i])); });
-  bg.onclick = e => { if (e.target === bg) bg.remove(); };
+  bg.onclick = e => { if (e.target === bg) close(); };
   document.body.appendChild(bg); draw();
 }
 function zoom(src){ const z=document.createElement('div'); z.className='zoom'; z.innerHTML=`<img src="${esc(src)}" alt="">`; z.onclick=()=>z.remove(); document.body.appendChild(z); }
-const newUnit = () => ({ id: uuid(), name:'', price_jpy:null, list_price:null, status:'stock', sold_price:null, sold_date:null, buyer:'' });
-
-function unitsTableHTML(units, al){
-  return `<table class="units"><thead><tr><th style="width:22%">名稱</th><th>日幣價</th><th>分攤成本</th><th>定價</th><th>狀態</th><th>賣出價</th><th>售出日</th><th>買家</th><th></th></tr></thead>
-    <tbody>${units.map((u,i)=>`<tr data-i="${i}">
-      <td><input data-k="name" value="${esc(u.name)}" placeholder="第 ${i+1} 隻"></td>
-      <td><input data-k="price_jpy" type="number" inputmode="numeric" value="${u.price_jpy??''}"></td>
-      <td class="alloc">${al[i]==null?'—':twd(al[i])}</td>
-      <td><input data-k="list_price" type="number" inputmode="numeric" value="${u.list_price??''}"></td>
-      <td><select data-k="status">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${u.status===k?'selected':''}>${v}</option>`).join('')}</select></td>
-      <td><input data-k="sold_price" type="number" inputmode="numeric" value="${u.sold_price??''}" ${u.status!=='sold'?'placeholder="—"':''}></td>
-      <td><input data-k="sold_date" type="date" value="${u.sold_date??''}"></td>
-      <td><input data-k="buyer" value="${esc(u.buyer||'')}"></td>
-      <td><button class="x" data-del="${i}" aria-label="刪除">✕</button></td></tr>`).join('')}</tbody></table>
-    ${units.length ? '' : '<div class="sub" style="padding:8px">還沒有加入任何一隻</div>'}`;
-}
-function bindUnitsTable(root, units, redraw){
-  $$('.units input, .units select', root).forEach(el => {
-    const ev = el.tagName === 'SELECT' ? 'change' : 'input';
-    el.addEventListener(ev, () => {
-      const u = units[+el.closest('tr').dataset.i], k = el.dataset.k;
-      u[k] = ['price_jpy','list_price','sold_price'].includes(k) ? num(el.value) : el.value;
-      if (k === 'status') {
-        if (el.value === 'sold') { if (u.sold_price == null) u.sold_price = u.list_price; if (!u.sold_date) u.sold_date = today(); }
-        redraw();
-      } else if (k === 'price_jpy') {
-        // 只更新分攤欄，不重繪（保留游標）
-        root.dispatchEvent(new CustomEvent('alloc'));
-      }
-    });
-  });
-  $$('[data-del]', root).forEach(b => b.onclick = () => { units.splice(+b.dataset.del, 1); redraw(); });
-}
 
 /* ---------- 新增 / 編輯 ---------- */
 async function fetchRate(){
@@ -469,24 +663,24 @@ function renderForm(edit){
   const isNew = !edit;
   const p = edit ? {...edit} : { id: uuid(), title:'', source_url:'', image_path:null, image_url:null, purchase_date: today(),
     price_jpy:null, rate: +localStorage.getItem('ledger-last-rate') || CFG.defaultRate || .215, paid_twd:null, shipping:0, fee:0, discount:0, tags:[], note:'' };
-  let units = (edit?.units || [newUnit()]).map(u=>({...u}));
+  let units = (edit?.units?.length ? edit.units : [newUnit()]).map(u=>({...u}));
   let tags = [...(p.tags||[])];
-  let imgBlob = null, imgPreview = edit ? imgs[edit.id] : null;
+  let imgBlob = null, mainSrc = edit ? imgs[edit.id] : null;
   const known = allTags();
 
   $('#app').innerHTML = `
     <h1>${isNew ? '新增記錄' : '編輯記錄'}</h1>
     <div class="card"><div class="grid">
-      <div class="wide"><div class="imgbox" id="imgbox" tabindex="0">${imgPreview ? `<img src="${esc(imgPreview)}" alt="">` : ''}
-        <div>${imgPreview ? '點擊更換圖片' : '點擊選擇圖片、拖曳進來，或直接 Ctrl+V 貼上截圖'}</div></div>
+      <div class="wide"><div class="imgbox" id="imgbox" tabindex="0">${mainSrc ? `<img src="${esc(mainSrc)}" alt="">` : ''}
+        <div>${mainSrc ? '點擊更換主圖' : '主圖：點擊選擇、拖曳進來，或直接 Ctrl+V 貼上截圖'}</div></div>
         <input type="file" id="file" accept="image/*" class="hidden">
-        <div class="row" style="margin-top:8px"><input id="imgurl" placeholder="或貼上圖片網址（不上傳，直接連結）" style="flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:8px" value="${esc(p.image_url||'')}">
-          ${imgPreview ? '<button class="btn small danger" id="rmimg">移除圖片</button>' : ''}</div></div>
+        <div class="row" style="margin-top:8px"><input id="imgurl" placeholder="或貼上圖片網址（不上傳，直接連結；這種圖無法裁切）" style="flex:1;padding:9px 10px;border:1px solid var(--line2);border-radius:9px;background:#fff" value="${esc(p.image_url||'')}">
+          ${mainSrc ? '<button class="btn small danger" id="rmimg">移除主圖</button>' : ''}</div></div>
       <label class="f wide">商品名稱<input id="title" value="${esc(p.title)}" placeholder="例如：赤羽業 娃娃 3 隻組"></label>
       <label class="f wide">原始購買網址<input id="source_url" type="url" value="${esc(p.source_url||'')}" placeholder="https://"></label>
       <label class="f">購買日期<input id="purchase_date" type="date" value="${esc(p.purchase_date)}"></label>
       <label class="f">原價（日幣）<input id="price_jpy" type="number" inputmode="numeric" value="${p.price_jpy??''}"></label>
-      <label class="f">匯率 JPY→TWD<span class="row"><input id="rate" type="number" step="0.0001" inputmode="decimal" value="${p.rate??''}" style="flex:1;min-width:0">
+      <label class="f">匯率 JPY→TWD<span class="row" style="flex-wrap:nowrap"><input id="rate" type="number" step="0.0001" inputmode="decimal" value="${p.rate??''}" style="flex:1">
         <button class="btn small" id="getrate" type="button">即時</button></span></label>
       <label class="f">實際購買價（台幣）<input id="paid_twd" type="number" inputmode="numeric" value="${p.paid_twd??''}" placeholder="留空 = 原價×匯率"></label>
       <label class="f">運費<input id="shipping" type="number" inputmode="numeric" value="${p.shipping??0}"></label>
@@ -498,9 +692,10 @@ function renderForm(edit){
     </div>
     <div class="calc" id="calc"></div></div>
 
-    <div class="card"><div class="row" style="justify-content:space-between"><b>每一隻</b>
+    <div class="card"><div class="row" style="justify-content:space-between"><span class="cap">每一隻</span>
       <span class="row"><button class="btn small" id="addu">＋ 加一隻</button><button class="btn small" id="addn">＋ 一次加多隻</button></span></div>
-      <div class="tablewrap" id="unitwrap" style="margin-top:8px"></div></div>
+      <div class="sub" id="amode" style="margin:4px 0 10px"></div>
+      <div id="unitwrap"></div></div>
 
     <div class="row" style="justify-content:space-between">
       ${isNew ? '<span></span>' : '<button class="btn danger" id="del">刪除這筆</button>'}
@@ -511,24 +706,29 @@ function renderForm(edit){
     Object.assign(p, { title: val('title').trim(), source_url: val('source_url').trim() || null, purchase_date: val('purchase_date') || today(),
       price_jpy: num(val('price_jpy')), rate: num(val('rate')), paid_twd: num(val('paid_twd')),
       shipping: num(val('shipping'))||0, fee: num(val('fee'))||0, discount: num(val('discount'))||0, note: val('note').trim() || null, tags });
-    const u = val('imgurl').trim(); if (u && !imgBlob) { p.image_url = u; } else if (!u && !imgBlob && !p.image_path) p.image_url = null;
+    const u = val('imgurl').trim();
+    if (u && !imgBlob) { if (u !== p.image_url && p.image_path) p._clearImage = true; p.image_url = u; }
+    else if (!u && !imgBlob && !p.image_path) p.image_url = null;
   };
   const calc = () => {
     read();
     const tmp = {...p, units};
+    const c = cost(tmp);
     $('#calc').innerHTML = [
-      ['實際購買價', twd(paid(tmp))], ['總成本', twd(cost(tmp))],
-      ['每隻平均成本', units.length && cost(tmp)!=null ? twd(cost(tmp)/units.length) : '—'],
+      ['實際購買價', twd(paid(tmp))], ['總成本', twd(c), 1],
+      ['每隻平均成本', units.length && c!=null ? twd(c/units.length) : '—'],
       ['定價合計', twd(units.reduce((s,u)=>s+(+u.list_price||0),0))],
-      ['已賣出', twd(soldTotal(tmp))], ['利潤', twd(profit(tmp))], ['全賣完利潤', cost(tmp)==null?'—':twd(expectTotal(tmp)-cost(tmp))]
-    ].map(([k,v])=>`<div><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+      ['已賣出', twd(soldTotal(tmp))], ['稅金', twd(taxTotal(tmp))], ['利潤', twd(profit(tmp)), 1], ['全賣完利潤', twd(expectProfit(tmp))]
+    ].map(([k,v,h])=>`<div class="${h?'hl':''}"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
     const al = alloc(tmp, units);
-    $$('#unitwrap td.alloc').forEach((td,i) => td.textContent = al[i]==null ? '—' : twd(al[i]));
+    $$('#unitwrap .ucard').forEach(card => { const i = +card.dataset.i, u = units[i];
+      const a = $('[data-alloc]', card); if (a) a.textContent = al[i]==null ? '—' : twd(al[i]);
+      const up = $('[data-uprofit]', card); if (up) up.textContent = al[i]==null||u.sold_price==null ? '—' : twd(u.sold_price-(+u.tax||0)-al[i]); });
+    $('#amode').textContent = '分攤成本：' + allocMode(units);
   };
   const drawUnits = () => {
-    const w = $('#unitwrap'); w.innerHTML = unitsTableHTML(units, alloc({...p, units}, units));
-    bindUnitsTable(w, units, drawUnits);
-    $$('input', w).forEach(i => i.addEventListener('input', calc));
+    const w = $('#unitwrap'); w.innerHTML = unitsHTML(units, alloc({...p, units}, units));
+    bindUnits(w, units, drawUnits, () => ({...p, units}), () => mainSrc, calc);
     calc();
   };
   const drawTags = () => {
@@ -536,23 +736,22 @@ function renderForm(edit){
     tags.forEach((t,i) => { const s=document.createElement('span'); s.className='chip'; s.textContent=t; s.title='點擊移除'; s.onclick=()=>{ tags.splice(i,1); drawTags(); }; $('#tagbox').insertBefore(s, $('#taginput')); });
   };
   const addTag = () => { const v = $('#taginput').value.trim().replace(/^#/, ''); if (v && !tags.includes(v)) tags.push(v); $('#taginput').value=''; drawTags(); };
-  $('#taginput').addEventListener('keydown', e => { if (e.key==='Enter' || e.key===',' || e.key==='，') { e.preventDefault(); addTag(); } else if (e.key==='Backspace' && !e.target.value && tags.length) { tags.pop(); drawTags(); } });
+  $('#taginput').addEventListener('keydown', e => { if (e.isComposing) return; if (e.key==='Enter' || e.key===',' || e.key==='，') { e.preventDefault(); addTag(); } else if (e.key==='Backspace' && !e.target.value && tags.length) { tags.pop(); drawTags(); } });
   $('#taginput').addEventListener('change', addTag);
-  $('#unitwrap').addEventListener('alloc', calc);
   drawTags(); drawUnits();
-  $$('.card input, .card textarea').forEach(i => { if (!i.closest('#unitwrap')) i.addEventListener('input', calc); });
+  $$('.card .grid input, .card .grid textarea').forEach(i => i.addEventListener('input', calc));
 
-  // 圖片
-  const setImg = (blob) => { if (!blob || !blob.type.startsWith('image/')) return; imgBlob = blob; const u = URL.createObjectURL(blob);
-    $('#imgbox').innerHTML = `<img src="${u}" alt=""><div>點擊更換圖片</div>`; $('#imgurl').value = ''; };
+  // 主圖
+  const setImg = (blob) => { if (!blob || !blob.type.startsWith('image/')) return; imgBlob = blob; mainSrc = URL.createObjectURL(blob);
+    $('#imgbox').innerHTML = `<img src="${mainSrc}" alt=""><div>點擊更換主圖</div>`; $('#imgurl').value = ''; };
+  window.__mainPaste = setImg;
   $('#imgbox').onclick = () => $('#file').click();
   $('#file').onchange = e => setImg(e.target.files[0]);
   $('#imgbox').ondragover = e => { e.preventDefault(); e.currentTarget.classList.add('drag'); };
   $('#imgbox').ondragleave = e => e.currentTarget.classList.remove('drag');
   $('#imgbox').ondrop = e => { e.preventDefault(); e.currentTarget.classList.remove('drag'); setImg(e.dataTransfer.files[0]); };
-  document.onpaste = e => { if (!location.hash.match(/^#(new|edit)/)) return; const it = [...(e.clipboardData?.items||[])].find(i=>i.type.startsWith('image/')); if (it) { e.preventDefault(); setImg(it.getAsFile()); toast('已貼上圖片'); } };
-  $('#imgurl').onchange = () => { const u = $('#imgurl').value.trim(); if (u) { imgBlob = null; $('#imgbox').innerHTML = `<img src="${esc(u)}" alt=""><div>使用外部網址</div>`; } };
-  if ($('#rmimg')) $('#rmimg').onclick = async () => { if (!confirm('移除這筆的圖片？')) return; p._clearImage = true; p.image_url = null; $('#imgurl').value=''; $('#imgbox').innerHTML='<div>已移除，儲存後生效</div>'; };
+  $('#imgurl').onchange = () => { const u = $('#imgurl').value.trim(); if (u) { imgBlob = null; mainSrc = u; $('#imgbox').innerHTML = `<img src="${esc(u)}" alt=""><div>使用外部網址</div>`; } };
+  if ($('#rmimg')) $('#rmimg').onclick = () => { if (!confirm('移除這筆的主圖？')) return; p._clearImage = true; p.image_url = null; mainSrc = null; imgBlob = null; $('#imgurl').value=''; $('#imgbox').innerHTML='<div>已移除，儲存後生效</div>'; };
 
   $('#getrate').onclick = async (e) => { e.target.disabled = true; e.target.textContent = '…'; const r = await fetchRate(); e.target.disabled = false; e.target.textContent = '即時';
     if (r) { $('#rate').value = r; calc(); toast('匯率 ' + r); } else toast('抓不到匯率，請手動輸入'); };
@@ -565,9 +764,9 @@ function renderForm(edit){
     if (!p.title) { toast('請填商品名稱'); $('#title').focus(); return; }
     e.target.disabled = true; e.target.textContent = '儲存中…';
     try {
-      if (p._clearImage) { await store.clearImage(p); } delete p._clearImage;
+      if (p._clearImage) await store.clearImage(p); delete p._clearImage;
       if (p.rate) localStorage.setItem('ledger-last-rate', p.rate);
-      const clean = units.filter(u => u.name || u.list_price != null || u.price_jpy != null || u.status !== 'stock');
+      const clean = units.filter(u => u.name || u.list_price != null || u.price_jpy != null || u.status !== 'stock' || u._blob || imgs[u.id]);
       await store.save(p, clean, imgBlob);
       await reload(); toast('已儲存'); location.hash = 'home';
     } catch(err){ console.error(err); toast('儲存失敗：' + (err.message||err)); e.target.disabled = false; e.target.textContent = '儲存'; }
@@ -577,68 +776,90 @@ function renderForm(edit){
 /* ---------- 統計 ---------- */
 function monthKey(d){ return String(d||'').slice(0,7); }
 function monthsBetween(a, b){ const out=[]; let [y,m]=a.split('-').map(Number); const [Y,M]=b.split('-').map(Number); while (y<Y || (y===Y && m<=M)) { out.push(`${y}-${String(m).padStart(2,'0')}`); m++; if (m>12){m=1;y++;} } return out; }
+const soldMonth = (u,p) => monthKey(u.sold_date || p.purchase_date);
 
-function monthly(){
+function period(){
   const now = monthKey(today());
-  const all = items.flatMap(p => [monthKey(p.purchase_date), ...(p.units||[]).filter(u=>u.status==='sold').map(u=>monthKey(u.sold_date||p.purchase_date))]).filter(Boolean).sort();
-  let start;
-  if (ui.range === 'all') start = all[0] || now;
-  else if (ui.range === 'year') start = now.slice(0,4) + '-01';
-  else { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - (+ui.range - 1)); start = d.toISOString().slice(0,7); }
-  const keys = monthsBetween(start, now);
-  const m = Object.fromEntries(keys.map(k => [k, {k, cost:0, sales:0, n:0, sold:0}]));
+  const all = items.flatMap(p => [monthKey(p.purchase_date), ...(p.units||[]).filter(sold).map(u=>soldMonth(u,p))]).filter(Boolean).sort();
+  if (ui.range === 'all') return all[0] || now;
+  if (ui.range === 'year') return now.slice(0,4) + '-01';
+  const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - (+ui.range - 1)); return ymLocal(d);
+}
+function monthly(start){
+  const keys = monthsBetween(start, monthKey(today()));
+  const m = Object.fromEntries(keys.map(k => [k, {k, cost:0, sales:0, tax:0, n:0, sold:0}]));
   items.forEach(p => {
     const k = monthKey(p.purchase_date); if (m[k]) { m[k].cost += cost(p)||0; m[k].n++; }
-    (p.units||[]).forEach(u => { if (u.status!=='sold') return; const s = monthKey(u.sold_date || p.purchase_date); if (m[s]) { m[s].sales += +u.sold_price||0; m[s].sold++; } });
+    (p.units||[]).filter(sold).forEach(u => { const r = m[soldMonth(u,p)]; if (r) { r.sales += +u.sold_price||0; r.tax += +u.tax||0; r.sold++; } });
   });
-  return { keys, rows: keys.map(k=>m[k]), start };
+  return keys.map(k=>m[k]);
 }
-
 function tagStats(start){
   const t = new Map();
   items.filter(p => monthKey(p.purchase_date) >= start).forEach(p => {
     const tg = (p.tags && p.tags.length) ? p.tags : ['（無標籤）'];
     tg.forEach(name => {
-      const r = t.get(name) || { name, n:0, units:0, sold:0, cost:0, sales:0, expect:0 };
-      r.n++; r.units += (p.units||[]).length; r.sold += soldCount(p); r.cost += cost(p)||0; r.sales += soldTotal(p); r.expect += expectTotal(p);
+      const r = t.get(name) || { name, n:0, units:0, sold:0, cost:0, sales:0, tax:0, expect:0 };
+      r.n++; r.units += (p.units||[]).length; r.sold += soldCount(p); r.cost += cost(p)||0; r.sales += soldTotal(p); r.tax += taxTotal(p); r.expect += expectTotal(p);
       t.set(name, r);
     });
   });
   return [...t.values()].sort((a,b)=>b.cost-a.cost);
 }
+// 售出位置／交易方式：依售出月份篩選期間；利潤用分攤成本算
+function channelStats(start, key){
+  const t = new Map();
+  items.forEach(p => { const al = alloc(p); (p.units||[]).forEach((u,i) => {
+    if (!sold(u) || soldMonth(u,p) < start) return;
+    const name = u[key] || '（未填）';
+    const r = t.get(name) || { name, n:0, sales:0, tax:0, cost:0 };
+    r.n++; r.sales += +u.sold_price||0; r.tax += +u.tax||0; r.cost += al[i]||0; t.set(name, r);
+  }); });
+  return [...t.values()].sort((a,b)=>b.sales-a.sales);
+}
+function channelTable(rows, title){
+  const max = Math.max(1, ...rows.map(r=>r.sales));
+  return `<div class="viz"><h3>${title}</h3><div class="tablewrap"><table class="plain"><thead><tr><th>${title}</th><th>隻數</th><th style="width:26%"></th><th>賣出</th><th>稅金</th><th>利潤</th></tr></thead>
+    <tbody>${rows.length ? rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.n}</td><td><div class="bar jade" style="width:${(r.sales/max*100).toFixed(1)}%"></div></td>
+      <td>${twd(r.sales)}</td><td>${r.tax?twd(r.tax):'—'}</td><td class="${r.sales-r.tax-r.cost>=0?'pos':'neg'}">${twd(r.sales-r.tax-r.cost)}</td></tr>`).join('') : '<tr><td colspan="6" class="sub">這段期間沒有售出</td></tr>'}</tbody></table></div></div>`;
+}
 
 function renderStats(){
-  const { rows, start } = monthly();
-  const tags = tagStats(start);
-  const tc = rows.reduce((s,r)=>s+r.cost,0), ts = rows.reduce((s,r)=>s+r.sales,0);
-  const stock = items.reduce((s,p)=>s+(p.units||[]).filter(u=>u.status!=='sold').length,0);
-  const stockVal = items.reduce((s,p)=>{ const al=alloc(p); return s+(p.units||[]).reduce((a,u,i)=>a+(u.status!=='sold'?(al[i]||0):0),0); },0);
+  const start = period();
+  const rows = monthly(start), tags = tagStats(start);
+  const tc = rows.reduce((s,r)=>s+r.cost,0), ts = rows.reduce((s,r)=>s+r.sales,0), tx = rows.reduce((s,r)=>s+r.tax,0);
+  const stock = items.reduce((s,p)=>s+(p.units||[]).filter(u=>!sold(u)).length,0);
+  const stockVal = items.reduce((s,p)=>{ const al=alloc(p); return s+(p.units||[]).reduce((a,u,i)=>a+(!sold(u)?(al[i]||0):0),0); },0);
   const maxTag = Math.max(1, ...tags.map(t=>t.cost));
   $('#app').innerHTML = `
     <div class="row" style="justify-content:space-between"><h1>統計</h1>
       <div class="seg" id="range">${[['6','近 6 月'],['12','近 12 月'],['year','今年'],['all','全部']].map(([k,v])=>`<button data-k="${k}" class="${ui.range===k?'on':''}">${v}</button>`).join('')}</div></div>
     <div class="summary">
       <div class="tile"><div class="k">期間總成本</div><div class="v">${twd(tc)}</div></div>
-      <div class="tile"><div class="k">期間賣出</div><div class="v">${twd(ts)}</div></div>
-      <div class="tile"><div class="k">期間淨額</div><div class="v ${ts-tc>=0?'pos':'neg'}">${twd(ts-tc)}</div></div>
-      <div class="tile"><div class="k">目前庫存（全部）</div><div class="v">${stock} 隻</div><div class="k">成本約 ${twd(stockVal)}</div></div>
+      <div class="tile"><div class="k">期間賣出</div><div class="v">${twd(ts)}</div>${tx?`<div class="k">稅金 ${twd(tx)}</div>`:''}</div>
+      <div class="tile gold"><div class="k">期間淨額</div><div class="v ${ts-tx-tc>=0?'pos':'neg'}">${twd(ts-tx-tc)}</div></div>
+      <div class="tile"><div class="k">目前庫存（全部）</div><div class="v">${stock} 隻</div><div class="k">分攤成本約 ${twd(stockVal)}</div></div>
     </div>
     <h2>每月成本統計</h2>
-    <div class="sub" style="margin-bottom:8px">成本算在購買月份；賣出算在售出日期的月份（沒填售出日就算購買月份）。</div>
+    <div class="sub" style="margin-bottom:8px">成本算在購買月份；賣出和稅金算在售出日期的月份（沒填售出日就算購買月份）。淨額 = 賣出 − 稅金 − 成本。</div>
     <div class="viz" id="viz">
       <div class="legend"><span><i style="background:var(--series-1)"></i>成本</span><span><i style="background:var(--series-2)"></i>賣出</span></div>
       <div id="chart"></div>
     </div>
     <details style="margin-top:8px"><summary class="sub" style="cursor:pointer">表格</summary>
-      <table class="plain"><thead><tr><th>月份</th><th>購買筆數</th><th>成本</th><th>賣出隻數</th><th>賣出</th><th>淨額</th></tr></thead>
-      <tbody>${rows.slice().reverse().map(r=>`<tr class="click" data-m="${r.k}"><td>${r.k}</td><td>${r.n}</td><td>${twd(r.cost)}</td><td>${r.sold}</td><td>${twd(r.sales)}</td><td class="${r.sales-r.cost>=0?'pos':'neg'}">${twd(r.sales-r.cost)}</td></tr>`).join('')}</tbody></table></details>
+      <div class="viz tablewrap" style="margin-top:6px"><table class="plain"><thead><tr><th>月份</th><th>購買筆數</th><th>成本</th><th>賣出隻數</th><th>賣出</th><th>稅金</th><th>淨額</th></tr></thead>
+      <tbody>${rows.slice().reverse().map(r=>`<tr class="click" data-m="${r.k}"><td>${r.k}</td><td>${r.n}</td><td>${twd(r.cost)}</td><td>${r.sold}</td><td>${twd(r.sales)}</td><td>${r.tax?twd(r.tax):'—'}</td><td class="${r.sales-r.tax-r.cost>=0?'pos':'neg'}">${twd(r.sales-r.tax-r.cost)}</td></tr>`).join('')}</tbody></table></div></details>
 
     <h2>標籤統計</h2>
     <div class="sub" style="margin-bottom:8px">依購買日期篩選期間。一筆有多個標籤時，會分別計入每個標籤。點一列可在首頁篩選。</div>
-    <div class="viz tablewrap"><table class="plain" style="min-width:640px"><thead><tr><th>標籤</th><th>筆數</th><th>售出 / 隻數</th><th style="width:22%"></th><th>成本</th><th>已賣出</th><th>利潤</th><th>全賣完利潤</th></tr></thead>
+    <div class="viz tablewrap"><table class="plain" style="min-width:680px"><thead><tr><th>標籤</th><th>筆數</th><th>售出 / 隻數</th><th style="width:20%"></th><th>成本</th><th>已賣出</th><th>利潤</th><th>全賣完利潤</th></tr></thead>
       <tbody>${tags.length ? tags.map(t=>`<tr class="click" data-tag="${esc(t.name)}"><td>${esc(t.name)}</td><td>${t.n}</td><td>${t.sold} / ${t.units}</td>
         <td><div class="bar" style="width:${(t.cost/maxTag*100).toFixed(1)}%"></div></td><td>${twd(t.cost)}</td><td>${twd(t.sales)}</td>
-        <td class="${t.sales-t.cost>=0?'pos':'neg'}">${twd(t.sales-t.cost)}</td><td>${twd(t.expect-t.cost)}</td></tr>`).join('') : '<tr><td colspan="8" class="sub">這段期間沒有資料</td></tr>'}</tbody></table></div>`;
+        <td class="${t.sales-t.tax-t.cost>=0?'pos':'neg'}">${twd(t.sales-t.tax-t.cost)}</td><td>${twd(t.expect-t.tax-t.cost)}</td></tr>`).join('') : '<tr><td colspan="8" class="sub">這段期間沒有資料</td></tr>'}</tbody></table></div>
+
+    <h2>售出通路</h2>
+    <div class="sub" style="margin-bottom:8px">依售出日期篩選期間。利潤 = 賣出 − 稅金 − 該隻的分攤成本。</div>
+    <div class="two">${channelTable(channelStats(start,'sold_place'),'售出位置')}${channelTable(channelStats(start,'trade_method'),'交易方式')}</div>`;
   $$('#range button').forEach(b => b.onclick = () => { ui.range = b.dataset.k; renderStats(); });
   $$('tr[data-tag]').forEach(tr => tr.onclick = () => { ui.tag = tr.dataset.tag === '（無標籤）' ? '' : tr.dataset.tag; ui.month=''; location.hash='home'; });
   $$('tr[data-m]').forEach(tr => tr.onclick = () => { ui.month = tr.dataset.m; ui.tag=''; location.hash='home'; });
@@ -657,14 +878,14 @@ function drawChart(rows){
   const ticks = [0, .25, .5, .75, 1].map(f => f*max);
   const fmtK = v => v >= 10000 ? (v/10000).toLocaleString('zh-TW',{maximumFractionDigits:1})+'萬' : v.toLocaleString('zh-TW');
   const every = Math.ceil(n / Math.floor(iw/52));
-  const bar = (x, v, color) => { if (v<=0) return ''; const h = Math.max(1, ih - (y(v)-T)), r = Math.min(4, bw/2, h);
-    const yt = y(v), yb = T+ih; return `<path d="M${x},${yb} V${yt+r} Q${x},${yt} ${x+r},${yt} H${x+bw-r} Q${x+bw},${yt} ${x+bw},${yt+r} V${yb} Z" fill="${color}"/>`; };
+  const bar = (x, v, color) => { if (v<=0) return ''; const yt = y(v), yb = T+ih, h = yb-yt, r = Math.min(4, bw/2, h);
+    return `<path d="M${x},${yb} V${yt+r} Q${x},${yt} ${x+r},${yt} H${x+bw-r} Q${x+bw},${yt} ${x+bw},${yt+r} V${yb} Z" fill="${color}"/>`; };
   let s = `<svg width="${W}" height="${H}" role="img" aria-label="每月成本與賣出長條圖" style="display:block;font-size:11px">`;
-  ticks.forEach(t => s += `<line x1="${L}" x2="${W-R}" y1="${y(t)}" y2="${y(t)}" stroke="#e3e6ea" ${t?'':'stroke="#b9bec5"'}/><text x="${L-6}" y="${y(t)+4}" text-anchor="end" fill="#868b92">${fmtK(t)}</text>`);
+  ticks.forEach(t => s += `<line x1="${L}" x2="${W-R}" y1="${y(t)}" y2="${y(t)}" stroke="${t?'#ece2d2':'#cdbb9d'}"/><text x="${L-6}" y="${y(t)+4}" text-anchor="end" fill="#9a8875">${fmtK(t)}</text>`);
   rows.forEach((r,i) => {
     const cx = L + band*i + band/2;
     s += bar(cx - bw - 1, r.cost, 'var(--series-1)') + bar(cx + 1, r.sales, 'var(--series-2)');
-    if (i % every === 0 || i === n-1) s += `<text x="${cx}" y="${H-8}" text-anchor="middle" fill="#52575e">${r.k.slice(2).replace('-','/')}</text>`;
+    if (i % every === 0 || i === n-1) s += `<text x="${cx}" y="${H-8}" text-anchor="middle" fill="#6b5847">${r.k.slice(2).replace('-','/')}</text>`;
     s += `<rect class="hit" data-i="${i}" x="${L+band*i}" y="${T}" width="${band}" height="${ih}" fill="transparent"/>`;
   });
   s += '</svg>';
@@ -673,11 +894,11 @@ function drawChart(rows){
   $$('.hit', host).forEach(h => {
     h.onmouseenter = h.ontouchstart = () => {
       const r = rows[+h.dataset.i]; tip && tip.remove(); tip = document.createElement('div'); tip.className = 'tip';
-      tip.innerHTML = `<b>${r.k}</b><br>成本 ${twd(r.cost)}（${r.n} 筆）<br>賣出 ${twd(r.sales)}（${r.sold} 隻）<br>淨額 ${twd(r.sales-r.cost)}`;
+      tip.innerHTML = `<b>${r.k}</b><br>成本 ${twd(r.cost)}（${r.n} 筆）<br>賣出 ${twd(r.sales)}（${r.sold} 隻）${r.tax?`<br>稅金 ${twd(r.tax)}`:''}<br>淨額 ${twd(r.sales-r.tax-r.cost)}`;
       const hb = h.getBoundingClientRect(), vb = viz.getBoundingClientRect();
       tip.style.left = Math.min(vb.width-80, Math.max(80, hb.left - vb.left + hb.width/2)) + 'px';
       tip.style.top = (y(Math.max(r.cost, r.sales)) + (host.getBoundingClientRect().top - vb.top) - 6) + 'px';
-      viz.appendChild(tip); h.setAttribute('fill','rgba(23,93,128,.06)');
+      viz.appendChild(tip); h.setAttribute('fill','rgba(168,116,31,.07)');
     };
     h.onmouseleave = () => { tip && tip.remove(); tip = null; h.setAttribute('fill','transparent'); };
   });
@@ -686,7 +907,7 @@ function drawChart(rows){
 /* ---------- 登入 ---------- */
 function renderLogin(){
   $('#tabs').classList.add('hidden');
-  $('#app').innerHTML = `<div class="card login"><h1>商品紀錄 · 登入</h1>
+  $('#app').innerHTML = `<div class="card login"><h1>登入</h1>
     <label class="f">Email<input id="em" type="email" autocomplete="username"></label><br>
     <label class="f">密碼<input id="pw" type="password" autocomplete="current-password"></label><br>
     <button class="btn primary" id="go" style="width:100%">登入</button><div class="sub" id="err" style="margin-top:8px"></div></div>`;
@@ -697,7 +918,9 @@ function renderLogin(){
 async function start(){
   try { await reload(); } catch(e){ console.error(e); $('#app').innerHTML = `<div class="card">讀取資料失敗：${esc(e.message||e)}<br><span class="sub">確認已在 Supabase 執行 schema.sql。</span></div>`; return; }
   $('#tabs').classList.remove('hidden');
-  window.onhashchange = route; route();
+  if (store.mode === 'supabase') { $('#topact').innerHTML = '<button class="btn small" id="logout">登出</button>'; $('#logout').onclick = async () => { await store.logout(); location.reload(); }; }
+  window.onhashchange = () => { window.__mainPaste = null; route(); };
+  route();
 }
 
 (async function boot(){
