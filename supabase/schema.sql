@@ -42,6 +42,11 @@ create table if not exists public.units (
   created_at  timestamptz not null default now()
 );
 
+-- v6：分帳（賣出後貨款先進帳戶，之後再分）
+alter table public.units add column if not exists settled      boolean not null default false;
+alter table public.units add column if not exists settled_date date;
+-- 進貨稅金欄位 buy_tax 現在顯示為「海關稅」；units.tax（銷售稅）已不使用，保留欄位不影響
+
 -- v5：購買證明（可多張，存 Storage 路徑）
 alter table public.purchases add column if not exists proof_paths text[] not null default '{}';
 

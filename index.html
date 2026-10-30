@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#7a5230">
 <title>商品紀錄</title>
 <script src="config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
 <style>
 :root{
   /* 淺大地色＋金：招財 */
@@ -82,6 +82,14 @@ table.ledger{border-collapse:separate;border-spacing:0 3px;min-width:1060px;widt
 .title-cell .t{font-weight:600}
 .title-cell .meta{font-size:12px;color:var(--ink2)}
 .plat{color:var(--walnut);font-weight:700}
+.unset{color:#b4472e;font-weight:600}
+.chk{display:flex;align-items:center;gap:6px;padding:9px 0;color:var(--ink);font-size:14px}
+.chk input,label.f .chk input{width:18px;height:18px;flex:none;padding:0;accent-color:var(--good)}
+.settlebox{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:10px}
+.plain td.ck,.plain th.ck{text-align:center;width:36px}
+.plain td.ck input{width:18px;height:18px;accent-color:var(--good)}
+.diag{background:#fde9e3;border:1px solid #eab3a3;color:#7a2a17;border-radius:10px;padding:10px 12px;font-size:13.5px;margin-bottom:14px;line-height:1.6}
+.diag code{background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px}
 .ship{display:inline-block;border-radius:6px;padding:1px 7px;font-size:12px;font-weight:700;border:1px solid}
 .ship.move{background:#fbf0d9;color:#8a621d;border-color:#e6c98a}
 .ship.arr{background:#e3f1e9;color:#1f6b4a;border-color:#a9d3bb}
@@ -255,21 +263,31 @@ const SHIP = ['到內湖','日本運送中','國際運送中','台灣運送中',
 const shipCls = v => v && v.startsWith('到') ? 'arr' : (v ? 'move' : 'none');
 const PLATFORMS = ['BNS','台灣煤爐','日本煤爐','Buyee','樂淘'];
 const PLACES = ['蝦皮','Facebook 社團','Instagram','Threads','LINE 社群','場販'];
+function errMsg(e){
+  const m = (e && (e.message || e.error_description || e.msg)) || String(e);
+  if (/schema cache|column .* does not exist|Could not find the .* column/i.test(m)) return m + '（資料表少了新欄位：請到 Supabase SQL Editor 重新執行最新的 schema.sql）';
+  if (/relation .* does not exist|Could not find the table/i.test(m)) return m + '（還沒建資料表：請到 SQL Editor 執行 schema.sql）';
+  if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return m + '（連不到 Supabase：檢查 config.js 的網址，或專案是否被暫停）';
+  if (/Invalid API key|No API key|JWT|apikey/i.test(m)) return m + '（API key 錯誤：config.js 要填 anon / publishable key）';
+  if (/row-level security|permission denied|violates row-level/i.test(m)) return m + '（被 RLS 擋下：確認已登入，且 schema.sql 的 policy 有建立）';
+  return m;
+}
 function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2200); }
 
 /* ---------- 計算 ---------- */
 // 實際購買價：有填用填的；沒填 = 原價 × 匯率
 function paid(p){ return p.paid_twd != null ? +p.paid_twd : (p.price_jpy != null && p.rate != null ? Math.round(p.price_jpy * p.rate) : null); }
-// 總成本 = 實際購買價 + 運費 + 手續費 + 進貨稅金 − 折扣
+// 總成本 = 實際購買價 + 運費 + 手續費 + 海關稅 − 折扣
 function cost(p){ const a = paid(p); if (a == null) return null; return a + (+p.shipping||0) + (+p.fee||0) + (+p.buy_tax||0) - (+p.discount||0); }
 const sold = u => u.status === 'sold';
 function soldTotal(p){ return (p.units||[]).reduce((s,u)=> s + (sold(u) ? (+u.sold_price||0) : 0), 0); }
-function taxTotal(p){ return (p.units||[]).reduce((s,u)=> s + (sold(u) ? (+u.tax||0) : 0), 0); }
 function soldCount(p){ return (p.units||[]).filter(sold).length; }
 function expectTotal(p){ return (p.units||[]).reduce((s,u)=> s + (sold(u) ? (+u.sold_price||0) : (+u.list_price||0)), 0); }
-// 利潤 = 已賣出 − 總成本 − 已賣出那幾隻的銷售稅金
-function profit(p){ const c = cost(p); return c == null ? null : soldTotal(p) - c - taxTotal(p); }
-function expectProfit(p){ const c = cost(p); return c == null ? null : expectTotal(p) - c - taxTotal(p); }
+// 利潤 = 已賣出 − 總成本
+function profit(p){ const c = cost(p); return c == null ? null : soldTotal(p) - c; }
+function expectProfit(p){ const c = cost(p); return c == null ? null : expectTotal(p) - c; }
+// 分帳：已售出那幾隻，貨款先進帳戶，之後再分
+function unsettledCount(p){ return (p.units||[]).filter(u => sold(u) && !u.settled).length; }
 // 每隻分攤成本：把「總成本」分給每一隻。每隻都有日幣價 → 照日幣價比例；否則平均。
 function alloc(p, units){
   units = units || p.units || []; const c = cost(p);
@@ -362,6 +380,7 @@ const LocalStore = {
   },
   async saveUnits(pid, units){ const d=this._read(); const p=d.find(x=>x.id===pid); p.units = await this._units(pid, units); this._write(d); },
   async patch(id, obj){ const d=this._read(); Object.assign(d.find(x=>x.id===id), obj); this._write(d); },
+  async patchUnits(ids, obj){ const d=this._read(); d.forEach(p => (p.units||[]).forEach(u => { if (ids.includes(u.id)) Object.assign(u, obj); })); this._write(d); },
   async remove(id){ this._write(this._read().filter(x=>x.id!==id)); },
   async imageUrls(list){ const m={}; list.forEach(p=>{ m[p.id] = p.image_data || p.image_url || null; (p.units||[]).forEach(u => { m[u.id] = u.image_data || null; }); }); return m; },
   async clearImage(p){ p.image_data = null; },
@@ -417,7 +436,7 @@ const SupaStore = {
       if (u._blob) { if (image_path) drop.push(image_path); image_path = await this._upload(await compress(u._blob, 900, .85), `units/${pid}/${u.id}`); }
       else if (u._clear) { if (image_path) drop.push(image_path); image_path = null; }
       rows.push({ id:u.id, purchase_id:pid, sort:i, name:u.name||'', image_path, price_jpy:num(u.price_jpy), list_price:num(u.list_price),
-        status:u.status||'stock', sold_price:num(u.sold_price), tax:num(u.tax), sold_date:u.sold_date||null,
+        status:u.status||'stock', sold_price:num(u.sold_price), settled: sold(u) ? !!u.settled : false, settled_date: sold(u) && u.settled ? (u.settled_date||null) : null, sold_date:u.sold_date||null,
         sold_place:u.sold_place||null, trade_method:u.trade_method||null, buyer:u.buyer||null });
     }
     const keep = new Set(rows.map(r=>r.id));
@@ -429,6 +448,7 @@ const SupaStore = {
     this._rm(drop);
   },
   async patch(id, obj){ const { error } = await this.sb.from('purchases').update(obj).eq('id', id); if (error) throw error; },
+  async patchUnits(ids, obj){ const { error } = await this.sb.from('units').update(obj).in('id', ids); if (error) throw error; },
   async remove(id){
     const { data } = await this.sb.from('purchases').select('image_path, proof_paths, units(image_path)').eq('id', id).single();
     const { error } = await this.sb.from('purchases').delete().eq('id', id); if (error) throw error;
@@ -456,7 +476,7 @@ function demoData(){
   const mk = (k, day, title, tags, jp, rate, ship, fee, disc, units, platform, btax) => ({ id: uuid(), title, source_url:'https://jp.mercari.com/', image_url:null,
     platform, buy_tax: btax||0, ship_status: ['日本運送中','國際運送中','到內湖','到中山'][k] || null,
     purchase_date: `${ym(k)}-${day}`, price_jpy: jp, rate, paid_twd: null, shipping: ship, fee, discount: disc, tags, note:'範例資料',
-    units: units.map((u,i)=>({ id:uuid(), sort:i, name:u[0], price_jpy:u[1], list_price:u[2], status:u[3], sold_price:u[4]??null, tax:u[5]??null,
+    units: units.map((u,i)=>({ id:uuid(), sort:i, name:u[0], price_jpy:u[1], list_price:u[2], status:u[3], sold_price:u[4]??null, settled: u[3]==='sold' && i===0, settled_date: u[3]==='sold' && i===0 ? `${ym(Math.max(0,k-1))}-20` : null,
       sold_place: u[3]==='sold' ? u[6] : null, trade_method: u[3]!=='stock' ? u[7] : null,
       sold_date: u[3]==='sold' ? `${ym(Math.max(0,k-1))}-15` : null })) });
   return [
@@ -510,6 +530,7 @@ function renderHome(){
   const months = [...new Set(items.map(p => String(p.purchase_date).slice(0,7)))].sort().reverse();
   const usedPlats = [...new Set(items.map(p => p.platform||'（未填）'))];
   $('#app').innerHTML = `
+    ${window.__cfgProblem ? `<div class="diag"><b>沒有連上 Supabase，目前是本機模式</b><br>${window.__cfgProblem}</div>` : ''}
     ${store.mode==='local' ? `<div class="banner">本機模式：資料只存在這台裝置的瀏覽器。在 config.js 填入 Supabase 設定即可改用雲端。
       <button class="btn small" id="exp">匯出 JSON</button> <button class="btn small" id="imp">匯入 JSON</button></div>` : ''}
     <h1>目前的紀錄</h1>
@@ -545,26 +566,27 @@ function renderShipBar(){
 function renderList(){
   renderShipBar();
   const list = filtered();
-  const tc = list.reduce((s,p)=>s+(cost(p)||0),0), ts = list.reduce((s,p)=>s+soldTotal(p),0), tx = list.reduce((s,p)=>s+taxTotal(p),0);
+  const tc = list.reduce((s,p)=>s+(cost(p)||0),0), ts = list.reduce((s,p)=>s+soldTotal(p),0);
+  const unset = list.reduce((s,p)=>s+(p.units||[]).filter(u=>sold(u)&&!u.settled).reduce((a,u)=>a+(+u.sold_price||0),0),0);
   const nu = list.reduce((s,p)=>s+(p.units||[]).length,0), ns = list.reduce((s,p)=>s+soldCount(p),0);
-  const pf = ts - tc - tx;
+  const pf = ts - tc;
   $('#list').innerHTML = `
     <div class="summary">
       <div class="tile"><div class="k">筆數 / 隻數</div><div class="v">${list.length} / ${nu}</div></div>
       <div class="tile"><div class="k">總成本</div><div class="v">${twd(tc)}</div></div>
-      <div class="tile"><div class="k">已賣出${tx?`（銷售稅 ${twd(tx)}）`:''}</div><div class="v">${twd(ts)}</div></div>
+      <div class="tile"><div class="k">已賣出</div><div class="v">${twd(ts)}</div>${unset?`<div class="k unset">未分帳 ${twd(unset)}</div>`:''}</div>
       <div class="tile gold"><div class="k">利潤</div><div class="v ${pf>=0?'pos':'neg'}">${twd(pf)}</div></div>
       <div class="tile"><div class="k">售出</div><div class="v">${ns} / ${nu}</div></div>
     </div>
     ${list.length ? `<div class="tbox"><div class="tablewrap"><table class="ledger">
-      <thead><tr><th>縮圖<br>／狀態</th><th>名稱</th><th>原價<br>(日幣)</th><th>實際<br>購買價</th><th>運費</th><th>手續費</th><th>進貨<br>稅金</th><th>折扣</th>
+      <thead><tr><th>縮圖<br>／狀態</th><th>名稱</th><th>原價<br>(日幣)</th><th>實際<br>購買價</th><th>運費</th><th>手續費</th><th>海關稅</th><th>折扣</th>
         <th>總成本</th><th>每隻定價</th><th>總賣出價</th><th>利潤</th></tr></thead>
       <tbody>${list.map(rowHTML).join('')}</tbody></table></div></div>`
       : `<div class="empty-state">${items.length ? '沒有符合條件的紀錄' : '還沒有紀錄，按下方「新增記錄」開始'}</div>`}`;
   $$('select.shipsel').forEach(sel => sel.onchange = async () => {
     const id = sel.closest('tr').dataset.id, v = sel.value || null;
     try { await store.patch(id, { ship_status: v }); const p = items.find(x=>x.id===id); if (p) p.ship_status = v; toast('已更新：' + (v||'未設定')); renderList(); }
-    catch(err){ toast('更新失敗：' + (err.message||err)); }
+    catch(err){ toast('更新失敗：' + errMsg(err)); }
   });
   $$('.ledger tbody tr').forEach(tr => tr.onclick = e => {
     if (e.target.closest('.unitbtn, .minis')) { openUnits(tr.dataset.id); return; }
@@ -575,7 +597,7 @@ function renderList(){
 }
 
 function rowHTML(p){
-  const c = cost(p), st = soldTotal(p), tx = taxTotal(p), pr = profit(p), n = (p.units||[]).length, ns = soldCount(p);
+  const c = cost(p), st = soldTotal(p), us = unsettledCount(p), pr = profit(p), n = (p.units||[]).length, ns = soldCount(p);
   const est = expectProfit(p);
   const prices = (p.units||[]).map(u=>+u.list_price).filter(x=>x>0);
   const pr0 = prices.length ? (Math.min(...prices)===Math.max(...prices) ? twd(prices[0]) : `${twd(Math.min(...prices))}–${Math.max(...prices).toLocaleString()}`) : '';
@@ -595,13 +617,13 @@ function rowHTML(p){
     <td class="num">${p.discount ? '−'+twd(p.discount) : '—'}</td>
     <td class="num"><b>${twd(c)}</b></td>
     <td><button class="unitbtn">${n} 隻 ▸</button><span class="est">${pr0}</span>${minis.length ? `<div class="minis">${minis.map(s=>`<img src="${esc(s)}" alt="" loading="lazy">`).join('')}</div>` : ''}</td>
-    <td class="num">${twd(st)}<span class="est">售出 ${ns}/${n}${tx?` · 銷售稅 ${twd(tx)}`:''}</span></td>
+    <td class="num">${twd(st)}<span class="est">售出 ${ns}/${n}${us?` · <span class="unset">未分帳 ${us}</span>`:''}</span></td>
     <td class="num"><b class="${pr==null?'':pr>=0?'pos':'neg'}">${twd(pr)}</b>${n-ns>0 && est!=null ? `<span class="est">全賣完 ${twd(est)}</span>`:''}</td>
   </tr>`;
 }
 
 /* ---------- 每一隻（卡片） ---------- */
-const newUnit = () => ({ id: uuid(), name:'', price_jpy:null, list_price:null, status:'stock', sold_price:null, tax:null, sold_date:null, sold_place:'', trade_method:'', buyer:'' });
+const newUnit = () => ({ id: uuid(), name:'', price_jpy:null, list_price:null, status:'stock', sold_price:null, settled:false, settled_date:null, sold_date:null, sold_place:'', trade_method:'', buyer:'' });
 const unitImg = u => u._clear ? null : (u._preview || imgs[u.id] || null);
 
 function unitsHTML(units, al){
@@ -620,12 +642,13 @@ function unitsHTML(units, al){
         <label class="f">定價<input data-k="list_price" type="number" inputmode="numeric" value="${u.list_price??''}"></label>
         ${saleOn ? `<div class="sec">${u.status==='sold'?'售出資訊':'預訂資訊'}</div>
         ${u.status==='sold' ? `<label class="f">賣出價<input data-k="sold_price" type="number" inputmode="numeric" value="${u.sold_price??''}"></label>
-        <label class="f">銷售稅金（如有）<input data-k="tax" type="number" inputmode="numeric" value="${u.tax??''}" placeholder="0"></label>
+        <label class="f settle">分帳<span class="chk"><input data-k="settled" type="checkbox" ${u.settled?'checked':''}> 已分帳</span></label>
+        ${u.settled ? `<label class="f">分帳日期<input data-k="settled_date" type="date" value="${u.settled_date??''}"></label>` : ''}
         <label class="f">售出日期<input data-k="sold_date" type="date" value="${u.sold_date??''}"></label>
         <label class="f">售出位置<input data-k="sold_place" list="dl-place" value="${esc(u.sold_place||'')}" placeholder="蝦皮、社團、場販…"></label>` : ''}
         <label class="f">交易方式<input data-k="trade_method" list="dl-method" value="${esc(u.trade_method||'')}" placeholder="賣貨便、面交…"></label>
         <label class="f">買家<input data-k="buyer" value="${esc(u.buyer||'')}"></label>
-        ${u.status==='sold' ? `<div class="alloc">這隻利潤<b data-uprofit>${al[i]==null||u.sold_price==null?'—':twd(u.sold_price-(+u.tax||0)-al[i])}</b></div>` : ''}` : ''}
+        ${u.status==='sold' ? `<div class="alloc">這隻利潤<b data-uprofit>${al[i]==null||u.sold_price==null?'—':twd(u.sold_price-al[i])}</b></div>` : ''}` : ''}
       </div>
       <button type="button" class="x" data-del="${i}" aria-label="刪除這隻">✕</button>
     </div>`; }).join('')}</div>
@@ -638,16 +661,17 @@ function bindUnits(root, units, redraw, getP, getMain, onChange){
     const al = alloc(getP(), units);
     $$('.ucard', root).forEach(card => { const i = +card.dataset.i, u = units[i];
       const a = $('[data-alloc]', card); if (a) a.textContent = al[i]==null ? '—' : twd(al[i]);
-      const up = $('[data-uprofit]', card); if (up) up.textContent = al[i]==null||u.sold_price==null ? '—' : twd(u.sold_price-(+u.tax||0)-al[i]); });
+      const up = $('[data-uprofit]', card); if (up) up.textContent = al[i]==null||u.sold_price==null ? '—' : twd(u.sold_price-al[i]); });
     onChange && onChange();
   };
   $$('.ucard', root).forEach(card => {
     const i = +card.dataset.i, u = units[i];
     $$('input,select', card).forEach(el => {
       const ev = el.tagName === 'SELECT' ? 'change' : 'input';
-      el.addEventListener(ev, () => {
+      el.addEventListener(el.type === 'checkbox' ? 'change' : ev, () => {
         const k = el.dataset.k;
-        u[k] = ['price_jpy','list_price','sold_price','tax'].includes(k) ? num(el.value) : el.value;
+        if (el.type === 'checkbox') { u[k] = el.checked; if (k === 'settled') { if (el.checked && !u.settled_date) u.settled_date = today(); if (!el.checked) u.settled_date = null; redraw(); } return; }
+        u[k] = ['price_jpy','list_price','sold_price'].includes(k) ? num(el.value) : el.value;
         if (k === 'status') {
           if (el.value === 'sold') { if (u.sold_price == null) u.sold_price = u.list_price; if (!u.sold_date) u.sold_date = today(); }
           redraw();
@@ -688,8 +712,8 @@ function openUnits(id){
   const onKey = e => { if (e.key === 'Escape' && !$('.cropbg') && !$('.zoom')) close(); };
   document.addEventListener('keydown', onKey);
   const head = () => {
-    const st = units.reduce((s,u)=>s+(sold(u)?(+u.sold_price||0):0),0), tx = units.reduce((s,u)=>s+(sold(u)?(+u.tax||0):0),0);
-    return `${twd(cost(p))} 總成本 · 已賣 ${twd(st)}${tx?`（銷售稅 ${twd(tx)}）`:''} · 利潤 <b class="${st-tx-(cost(p)||0)>=0?'pos':'neg'}">${twd(st-tx-(cost(p)||0))}</b>`;
+    const st = units.reduce((s,u)=>s+(sold(u)?(+u.sold_price||0):0),0), un = units.reduce((s,u)=>s+(sold(u)&&!u.settled?(+u.sold_price||0):0),0);
+    return `${twd(cost(p))} 總成本 · 已賣 ${twd(st)}${un?`（<span class="unset">未分帳 ${twd(un)}</span>）`:''} · 利潤 <b class="${st-(cost(p)||0)>=0?'pos':'neg'}">${twd(st-(cost(p)||0))}</b>`;
   };
   const draw = () => {
     bg.innerHTML = `<div class="modal">
@@ -712,7 +736,7 @@ function openUnits(id){
     $('#saveu', bg).onclick = async (e) => {
       e.target.disabled = true; e.target.textContent = '儲存中…';
       try { await store.saveUnits(p.id, units); await reload(); close(); toast('已儲存'); route(); }
-      catch(err){ console.error(err); toast('儲存失敗：' + (err.message||err)); e.target.disabled = false; e.target.textContent = '儲存'; }
+      catch(err){ console.error(err); toast('儲存失敗：' + errMsg(err)); e.target.disabled = false; e.target.textContent = '儲存'; }
     };
   };
   bg.onclick = e => { if (e.target === bg) close(); };
@@ -774,7 +798,7 @@ function renderForm(edit){
       <label class="f">實際購買價（台幣）<input id="paid_twd" type="number" inputmode="numeric" value="${p.paid_twd??''}" placeholder="留空 = 原價×匯率"></label>
       <label class="f">運費<input id="shipping" type="number" inputmode="numeric" value="${p.shipping??0}"></label>
       <label class="f">手續費<input id="fee" type="number" inputmode="numeric" value="${p.fee??0}"></label>
-      <label class="f">進貨稅金（如有）<input id="buy_tax" type="number" inputmode="numeric" value="${p.buy_tax??0}"></label>
+      <label class="f">海關稅（如有）<input id="buy_tax" type="number" inputmode="numeric" value="${p.buy_tax??0}"></label>
       <label class="f">折扣（台幣）<input id="discount" type="number" inputmode="numeric" value="${p.discount??0}"></label>
       <label class="f wide">標籤<div class="tags-input" id="tagbox"><input id="taginput" list="taglist" placeholder="輸入後按 Enter"></div>
         <datalist id="taglist">${known.map(t=>`<option value="${esc(t)}">`).join('')}</datalist></label>
@@ -810,12 +834,12 @@ function renderForm(edit){
       ['實際購買價', twd(paid(tmp))], ['總成本', twd(c), 1],
       ['每隻平均成本', units.length && c!=null ? twd(c/units.length) : '—'],
       ['定價合計', twd(units.reduce((s,u)=>s+(+u.list_price||0),0))],
-      ['已賣出', twd(soldTotal(tmp))], ['銷售稅金', twd(taxTotal(tmp))], ['利潤', twd(profit(tmp)), 1], ['全賣完利潤', twd(expectProfit(tmp))]
+      ['已賣出', twd(soldTotal(tmp))], ['利潤', twd(profit(tmp)), 1], ['全賣完利潤', twd(expectProfit(tmp))]
     ].map(([k,v,h])=>`<div class="${h?'hl':''}"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
     const al = alloc(tmp, units);
     $$('#unitwrap .ucard').forEach(card => { const i = +card.dataset.i, u = units[i];
       const a = $('[data-alloc]', card); if (a) a.textContent = al[i]==null ? '—' : twd(al[i]);
-      const up = $('[data-uprofit]', card); if (up) up.textContent = al[i]==null||u.sold_price==null ? '—' : twd(u.sold_price-(+u.tax||0)-al[i]); });
+      const up = $('[data-uprofit]', card); if (up) up.textContent = al[i]==null||u.sold_price==null ? '—' : twd(u.sold_price-al[i]); });
     $('#amode').textContent = '分攤成本：' + allocMode(units);
   };
   const drawUnits = () => {
@@ -867,7 +891,7 @@ function renderForm(edit){
   $('#addu').onclick = () => { units.push(newUnit()); drawUnits(); };
   $('#addn').onclick = () => { const n = parseInt(prompt('要加幾隻？', '3')); if (n > 0 && n <= 50) { for (let i=0;i<n;i++) units.push(newUnit()); drawUnits(); } };
   $('#cancel').onclick = () => history.length > 1 ? history.back() : (location.hash = 'home');
-  if ($('#del')) $('#del').onclick = async () => { if (!confirm('確定刪除這筆紀錄和所有「每一隻」？')) return; try { await store.remove(p.id); await reload(); toast('已刪除'); location.hash='home'; } catch(err){ toast('刪除失敗：'+(err.message||err)); } };
+  if ($('#del')) $('#del').onclick = async () => { if (!confirm('確定刪除這筆紀錄和所有「每一隻」？')) return; try { await store.remove(p.id); await reload(); toast('已刪除'); location.hash='home'; } catch(err){ toast('刪除失敗：'+errMsg(err)); } };
   $('#save').onclick = async (e) => {
     read(); if ($('#taginput').value.trim()) { addTag(); read(); }
     if (!p.title) { toast('請填商品名稱'); $('#title').focus(); return; }
@@ -881,7 +905,7 @@ function renderForm(edit){
       await reload(); toast('已儲存');
       if (isNew) Object.assign(ui, { q:'', tag:'', month:'', platform:'', ship:'' }); // 新增後清掉篩選，才看得到剛建的那筆
       location.hash = 'home';
-    } catch(err){ console.error(err); toast('儲存失敗：' + (err.message||err)); e.target.disabled = false; e.target.textContent = '儲存'; }
+    } catch(err){ console.error(err); toast('儲存失敗：' + errMsg(err)); e.target.disabled = false; e.target.textContent = '儲存'; }
   };
 }
 
@@ -899,10 +923,10 @@ function period(){
 }
 function monthly(start){
   const keys = monthsBetween(start, monthKey(today()));
-  const m = Object.fromEntries(keys.map(k => [k, {k, cost:0, sales:0, tax:0, n:0, sold:0}]));
+  const m = Object.fromEntries(keys.map(k => [k, {k, cost:0, sales:0, n:0, sold:0}]));
   items.forEach(p => {
     const k = monthKey(p.purchase_date); if (m[k]) { m[k].cost += cost(p)||0; m[k].n++; }
-    (p.units||[]).filter(sold).forEach(u => { const r = m[soldMonth(u,p)]; if (r) { r.sales += +u.sold_price||0; r.tax += +u.tax||0; r.sold++; } });
+    (p.units||[]).filter(sold).forEach(u => { const r = m[soldMonth(u,p)]; if (r) { r.sales += +u.sold_price||0; r.sold++; } });
   });
   return keys.map(k=>m[k]);
 }
@@ -911,8 +935,8 @@ function tagStats(start){
   items.filter(p => monthKey(p.purchase_date) >= start).forEach(p => {
     const tg = (p.tags && p.tags.length) ? p.tags : ['（無標籤）'];
     tg.forEach(name => {
-      const r = t.get(name) || { name, n:0, units:0, sold:0, cost:0, sales:0, tax:0, expect:0 };
-      r.n++; r.units += (p.units||[]).length; r.sold += soldCount(p); r.cost += cost(p)||0; r.sales += soldTotal(p); r.tax += taxTotal(p); r.expect += expectTotal(p);
+      const r = t.get(name) || { name, n:0, units:0, sold:0, cost:0, sales:0, expect:0 };
+      r.n++; r.units += (p.units||[]).length; r.sold += soldCount(p); r.cost += cost(p)||0; r.sales += soldTotal(p); r.expect += expectTotal(p);
       t.set(name, r);
     });
   });
@@ -923,11 +947,11 @@ function platformStats(start){
   const t = new Map();
   items.filter(p => monthKey(p.purchase_date) >= start).forEach(p => {
     const name = p.platform || '（未填）';
-    const r = t.get(name) || { name, n:0, units:0, jpy:0, paid:0, extra:0, cost:0, sales:0, tax:0 };
+    const r = t.get(name) || { name, n:0, units:0, jpy:0, paid:0, extra:0, cost:0, sales:0 };
     const a = paid(p) || 0;
     r.n++; r.units += (p.units||[]).length; r.jpy += +p.price_jpy||0; r.paid += a;
     r.extra += (+p.shipping||0) + (+p.fee||0) + (+p.buy_tax||0) - (+p.discount||0);
-    r.cost += cost(p)||0; r.sales += soldTotal(p); r.tax += taxTotal(p); t.set(name, r);
+    r.cost += cost(p)||0; r.sales += soldTotal(p); t.set(name, r);
   });
   return [...t.values()].sort((a,b)=>b.cost-a.cost);
 }
@@ -937,22 +961,61 @@ function channelStats(start, key){
   items.forEach(p => { const al = alloc(p); (p.units||[]).forEach((u,i) => {
     if (!sold(u) || soldMonth(u,p) < start) return;
     const name = u[key] || '（未填）';
-    const r = t.get(name) || { name, n:0, sales:0, tax:0, cost:0 };
-    r.n++; r.sales += +u.sold_price||0; r.tax += +u.tax||0; r.cost += al[i]||0; t.set(name, r);
+    const r = t.get(name) || { name, n:0, sales:0, cost:0 };
+    r.n++; r.sales += +u.sold_price||0; r.cost += al[i]||0; t.set(name, r);
   }); });
   return [...t.values()].sort((a,b)=>b.sales-a.sales);
 }
 function channelTable(rows, title){
   const max = Math.max(1, ...rows.map(r=>r.sales));
-  return `<div class="viz"><h3>${title}</h3><div class="tablewrap"><table class="plain"><thead><tr><th>${title}</th><th>隻數</th><th style="width:26%"></th><th>賣出</th><th>銷售稅金</th><th>利潤</th></tr></thead>
+  return `<div class="viz"><h3>${title}</h3><div class="tablewrap"><table class="plain"><thead><tr><th>${title}</th><th>隻數</th><th style="width:26%"></th><th>賣出</th><th>利潤</th></tr></thead>
     <tbody>${rows.length ? rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.n}</td><td><div class="bar jade" style="width:${(r.sales/max*100).toFixed(1)}%"></div></td>
-      <td>${twd(r.sales)}</td><td>${r.tax?twd(r.tax):'—'}</td><td class="${r.sales-r.tax-r.cost>=0?'pos':'neg'}">${twd(r.sales-r.tax-r.cost)}</td></tr>`).join('') : '<tr><td colspan="6" class="sub">這段期間沒有售出</td></tr>'}</tbody></table></div></div>`;
+      <td>${twd(r.sales)}</td><td class="${r.sales-r.cost>=0?'pos':'neg'}">${twd(r.sales-r.cost)}</td></tr>`).join('') : '<tr><td colspan="5" class="sub">這段期間沒有售出</td></tr>'}</tbody></table></div></div>`;
 }
 
+function settleRows(){
+  const out = [];
+  items.forEach(p => { const al = alloc(p); (p.units||[]).forEach((u,i) => { if (sold(u)) out.push({ p, u, alloc: al[i] }); }); });
+  return out;
+}
+function settleHTML(start){
+  const rows = settleRows();
+  const un = rows.filter(r => !r.u.settled).sort((a,b)=>String(a.u.sold_date||a.p.purchase_date).localeCompare(String(b.u.sold_date||b.p.purchase_date)));
+  const done = rows.filter(r => r.u.settled && monthKey(r.u.settled_date || r.u.sold_date || r.p.purchase_date) >= start);
+  const sum = (a,f) => a.reduce((s,r)=>s+f(r),0);
+  const unAmt = sum(un, r=>+r.u.sold_price||0), unPf = sum(un, r=>(+r.u.sold_price||0)-(r.alloc||0));
+  const dnAmt = sum(done, r=>+r.u.sold_price||0), dnPf = sum(done, r=>(+r.u.sold_price||0)-(r.alloc||0));
+  return `<div class="settlebox">
+      <div class="tile gold"><div class="k">未分帳貨款（${un.length} 隻）</div><div class="v unset">${twd(unAmt)}</div><div class="k">其中利潤 ${twd(unPf)}</div></div>
+      <div class="tile"><div class="k">期間已分帳貨款（${done.length} 隻）</div><div class="v">${twd(dnAmt)}</div><div class="k">其中利潤 ${twd(dnPf)}</div></div>
+    </div>
+    <div class="viz tablewrap">${un.length ? `<div class="row" style="justify-content:space-between;margin-bottom:6px"><b style="font-size:14px">未分帳明細</b>
+        <span class="row"><span class="sub" id="selsum"></span><button class="btn small goldbtn" id="dosettle" disabled>標記為已分帳</button></span></div>
+      <table class="plain" style="min-width:680px"><thead><tr><th class="ck"><input type="checkbox" id="ckall" title="全選"></th><th style="text-align:left">售出日</th><th style="text-align:left">商品</th><th style="text-align:left">這隻</th><th style="text-align:left">售出位置</th><th style="text-align:left">買家</th><th>賣出價</th><th>分攤成本</th><th>利潤</th></tr></thead>
+      <tbody>${un.map(r=>`<tr><td class="ck"><input type="checkbox" class="ck1" value="${r.u.id}" data-amt="${+r.u.sold_price||0}" data-pf="${(+r.u.sold_price||0)-(r.alloc||0)}"></td>
+        <td style="text-align:left">${esc(r.u.sold_date||'—')}</td><td style="text-align:left;white-space:normal;max-width:220px">${esc(r.p.title)}</td><td style="text-align:left">${esc(r.u.name||'—')}</td>
+        <td style="text-align:left">${esc(r.u.sold_place||'—')}</td><td style="text-align:left">${esc(r.u.buyer||'—')}</td>
+        <td>${twd(r.u.sold_price)}</td><td>${twd(r.alloc)}</td><td class="${(+r.u.sold_price||0)-(r.alloc||0)>=0?'pos':'neg'}">${twd((+r.u.sold_price||0)-(r.alloc||0))}</td></tr>`).join('')}</tbody></table>`
+      : '<div class="sub" style="padding:6px">全部都分帳完了 👍</div>'}</div>`;
+}
+function bindSettle(){
+  const btn = $('#dosettle'); if (!btn) return;
+  const upd = () => { const ck = $$('.ck1:checked'); btn.disabled = !ck.length;
+    $('#selsum').textContent = ck.length ? `已選 ${ck.length} 隻・貨款 ${twd(ck.reduce((s,c)=>s+ +c.dataset.amt,0))}・利潤 ${twd(ck.reduce((s,c)=>s+ +c.dataset.pf,0))}` : ''; };
+  $$('.ck1').forEach(c => c.onchange = upd);
+  $('#ckall').onchange = e => { $$('.ck1').forEach(c => c.checked = e.target.checked); upd(); };
+  btn.onclick = async () => {
+    const ids = $$('.ck1:checked').map(c => c.value);
+    const d = prompt(`把 ${ids.length} 隻標記為已分帳。分帳日期：`, today()); if (d === null) return;
+    btn.disabled = true;
+    try { await store.patchUnits(ids, { settled: true, settled_date: d || today() }); await reload(); toast('已標記分帳'); renderStats(); }
+    catch(err){ toast('更新失敗：' + errMsg(err)); btn.disabled = false; }
+  };
+}
 function renderStats(){
   const start = period();
   const rows = monthly(start), tags = tagStats(start);
-  const tc = rows.reduce((s,r)=>s+r.cost,0), ts = rows.reduce((s,r)=>s+r.sales,0), tx = rows.reduce((s,r)=>s+r.tax,0);
+  const tc = rows.reduce((s,r)=>s+r.cost,0), ts = rows.reduce((s,r)=>s+r.sales,0);
   const stock = items.reduce((s,p)=>s+(p.units||[]).filter(u=>!sold(u)).length,0);
   const stockVal = items.reduce((s,p)=>{ const al=alloc(p); return s+(p.units||[]).reduce((a,u,i)=>a+(!sold(u)?(al[i]||0):0),0); },0);
   const maxTag = Math.max(1, ...tags.map(t=>t.cost));
@@ -961,41 +1024,46 @@ function renderStats(){
       <div class="seg" id="range">${[['6','近 6 月'],['12','近 12 月'],['year','今年'],['all','全部']].map(([k,v])=>`<button data-k="${k}" class="${ui.range===k?'on':''}">${v}</button>`).join('')}</div></div>
     <div class="summary">
       <div class="tile"><div class="k">期間總成本</div><div class="v">${twd(tc)}</div></div>
-      <div class="tile"><div class="k">期間賣出</div><div class="v">${twd(ts)}</div>${tx?`<div class="k">銷售稅金 ${twd(tx)}</div>`:''}</div>
-      <div class="tile gold"><div class="k">期間淨額</div><div class="v ${ts-tx-tc>=0?'pos':'neg'}">${twd(ts-tx-tc)}</div></div>
+      <div class="tile"><div class="k">期間賣出</div><div class="v">${twd(ts)}</div></div>
+      <div class="tile gold"><div class="k">期間淨額</div><div class="v ${ts-tc>=0?'pos':'neg'}">${twd(ts-tc)}</div></div>
       <div class="tile"><div class="k">目前庫存（全部）</div><div class="v">${stock} 隻</div><div class="k">分攤成本約 ${twd(stockVal)}</div></div>
     </div>
+    <h2>分帳</h2>
+    <div class="sub" style="margin-bottom:8px">貨款先進你的帳戶，分帳後再勾「已分帳」。未分帳是目前累積的總額（不受上方期間影響）；已分帳依分帳日期算在期間內。利潤 = 賣出價 − 該隻分攤成本，給你對照要分的金額。</div>
+    ${settleHTML(start)}
+
     <h2>每月成本統計</h2>
-    <div class="sub" style="margin-bottom:8px">成本（含進貨稅金）算在購買月份；賣出和銷售稅金算在售出日期的月份（沒填售出日就算購買月份）。淨額 = 賣出 − 銷售稅金 − 成本。</div>
+    <div class="sub" style="margin-bottom:8px">成本（含海關稅）算在購買月份；賣出算在售出日期的月份（沒填售出日就算購買月份）。淨額 = 賣出 − 成本。</div>
     <div class="viz" id="viz">
       <div class="legend"><span><i style="background:var(--series-1)"></i>成本</span><span><i style="background:var(--series-2)"></i>賣出</span></div>
       <div id="chart"></div>
     </div>
     <details style="margin-top:8px"><summary class="sub" style="cursor:pointer">表格</summary>
-      <div class="viz tablewrap" style="margin-top:6px"><table class="plain"><thead><tr><th>月份</th><th>購買筆數</th><th>成本</th><th>賣出隻數</th><th>賣出</th><th>銷售稅金</th><th>淨額</th></tr></thead>
-      <tbody>${rows.slice().reverse().map(r=>`<tr class="click" data-m="${r.k}"><td>${r.k}</td><td>${r.n}</td><td>${twd(r.cost)}</td><td>${r.sold}</td><td>${twd(r.sales)}</td><td>${r.tax?twd(r.tax):'—'}</td><td class="${r.sales-r.tax-r.cost>=0?'pos':'neg'}">${twd(r.sales-r.tax-r.cost)}</td></tr>`).join('')}</tbody></table></div></details>
+      <div class="viz tablewrap" style="margin-top:6px"><table class="plain"><thead><tr><th>月份</th><th>購買筆數</th><th>成本</th><th>賣出隻數</th><th>賣出</th><th>淨額</th></tr></thead>
+      <tbody>${rows.slice().reverse().map(r=>`<tr class="click" data-m="${r.k}"><td>${r.k}</td><td>${r.n}</td><td>${twd(r.cost)}</td><td>${r.sold}</td><td>${twd(r.sales)}</td><td class="${r.sales-r.cost>=0?'pos':'neg'}">${twd(r.sales-r.cost)}</td></tr>`).join('')}</tbody></table></div></details>
 
     <h2>標籤統計</h2>
     <div class="sub" style="margin-bottom:8px">依購買日期篩選期間。一筆有多個標籤時，會分別計入每個標籤。點一列可在首頁篩選。</div>
     <div class="viz tablewrap"><table class="plain" style="min-width:680px"><thead><tr><th>標籤</th><th>筆數</th><th>售出 / 隻數</th><th style="width:20%"></th><th>成本</th><th>已賣出</th><th>利潤</th><th>全賣完利潤</th></tr></thead>
       <tbody>${tags.length ? tags.map(t=>`<tr class="click" data-tag="${esc(t.name)}"><td>${esc(t.name)}</td><td>${t.n}</td><td>${t.sold} / ${t.units}</td>
         <td><div class="bar" style="width:${(t.cost/maxTag*100).toFixed(1)}%"></div></td><td>${twd(t.cost)}</td><td>${twd(t.sales)}</td>
-        <td class="${t.sales-t.tax-t.cost>=0?'pos':'neg'}">${twd(t.sales-t.tax-t.cost)}</td><td>${twd(t.expect-t.tax-t.cost)}</td></tr>`).join('') : '<tr><td colspan="8" class="sub">這段期間沒有資料</td></tr>'}</tbody></table></div>
+        <td class="${t.sales-t.cost>=0?'pos':'neg'}">${twd(t.sales-t.cost)}</td><td>${twd(t.expect-t.cost)}</td></tr>`).join('') : '<tr><td colspan="8" class="sub">這段期間沒有資料</td></tr>'}</tbody></table></div>
 
     <h2>購買平台</h2>
-    <div class="sub" style="margin-bottom:8px">依購買日期篩選期間。額外費用 = 運費 + 手續費 + 進貨稅金 − 折扣；費用比例 = 額外費用 ÷ 實際購買價，可以比較哪個平台買起來比較划算。點一列可在首頁篩選。</div>
+    <div class="sub" style="margin-bottom:8px">依購買日期篩選期間。額外費用 = 運費 + 手續費 + 海關稅 − 折扣；費用比例 = 額外費用 ÷ 實際購買價，可以比較哪個平台買起來比較划算。點一列可在首頁篩選。</div>
     <div class="viz tablewrap">${(() => { const ps = platformStats(start); const mx = Math.max(1, ...ps.map(r=>r.cost)); return `<table class="plain" style="min-width:720px"><thead><tr><th>平台</th><th>筆數</th><th>隻數</th><th style="width:16%"></th><th>總成本</th><th>實際購買價</th><th>額外費用</th><th>費用比例</th><th>已賣出</th><th>利潤</th></tr></thead>
       <tbody>${ps.length ? ps.map(r=>`<tr class="click" data-plat="${esc(r.name)}"><td>${esc(r.name)}</td><td>${r.n}</td><td>${r.units}</td><td><div class="bar" style="width:${(r.cost/mx*100).toFixed(1)}%"></div></td>
         <td>${twd(r.cost)}</td><td>${twd(r.paid)}</td><td>${twd(r.extra)}</td><td>${r.paid ? (r.extra/r.paid*100).toFixed(1)+'%' : '—'}</td><td>${twd(r.sales)}</td>
-        <td class="${r.sales-r.tax-r.cost>=0?'pos':'neg'}">${twd(r.sales-r.tax-r.cost)}</td></tr>`).join('') : '<tr><td colspan="10" class="sub">這段期間沒有資料</td></tr>'}</tbody></table>`; })()}</div>
+        <td class="${r.sales-r.cost>=0?'pos':'neg'}">${twd(r.sales-r.cost)}</td></tr>`).join('') : '<tr><td colspan="10" class="sub">這段期間沒有資料</td></tr>'}</tbody></table>`; })()}</div>
 
     <h2>售出通路</h2>
-    <div class="sub" style="margin-bottom:8px">依售出日期篩選期間。利潤 = 賣出 − 銷售稅金 − 該隻的分攤成本。</div>
+    <div class="sub" style="margin-bottom:8px">依售出日期篩選期間。利潤 = 賣出 − 該隻的分攤成本。</div>
     <div class="two">${channelTable(channelStats(start,'sold_place'),'售出位置')}${channelTable(channelStats(start,'trade_method'),'交易方式')}</div>`;
   $$('#range button').forEach(b => b.onclick = () => { ui.range = b.dataset.k; renderStats(); });
   $$('tr[data-tag]').forEach(tr => tr.onclick = () => { ui.tag = tr.dataset.tag === '（無標籤）' ? '' : tr.dataset.tag; ui.month=''; location.hash='home'; });
   $$('tr[data-m]').forEach(tr => tr.onclick = () => { ui.month = tr.dataset.m; ui.tag=''; ui.platform=''; location.hash='home'; });
   $$('tr[data-plat]').forEach(tr => tr.onclick = () => { ui.platform = tr.dataset.plat; ui.tag=''; ui.month=''; location.hash='home'; });
+  bindSettle();
   drawChart(rows);
   window.onresize = () => { if ((location.hash||'').startsWith('#stats')) drawChart(rows); };
 }
@@ -1027,7 +1095,7 @@ function drawChart(rows){
   $$('.hit', host).forEach(h => {
     h.onmouseenter = h.ontouchstart = () => {
       const r = rows[+h.dataset.i]; tip && tip.remove(); tip = document.createElement('div'); tip.className = 'tip';
-      tip.innerHTML = `<b>${r.k}</b><br>成本 ${twd(r.cost)}（${r.n} 筆）<br>賣出 ${twd(r.sales)}（${r.sold} 隻）${r.tax?`<br>銷售稅金 ${twd(r.tax)}`:''}<br>淨額 ${twd(r.sales-r.tax-r.cost)}`;
+      tip.innerHTML = `<b>${r.k}</b><br>成本 ${twd(r.cost)}（${r.n} 筆）<br>賣出 ${twd(r.sales)}（${r.sold} 隻）<br>淨額 ${twd(r.sales-r.cost)}`;
       const hb = h.getBoundingClientRect(), vb = viz.getBoundingClientRect();
       tip.style.left = Math.min(vb.width-80, Math.max(80, hb.left - vb.left + hb.width/2)) + 'px';
       tip.style.top = (y(Math.max(r.cost, r.sales)) + (host.getBoundingClientRect().top - vb.top) - 6) + 'px';
@@ -1043,24 +1111,49 @@ function renderLogin(){
   $('#app').innerHTML = `<div class="card login"><h1>登入</h1>
     <label class="f">Email<input id="em" type="email" autocomplete="username"></label><br>
     <label class="f">密碼<input id="pw" type="password" autocomplete="current-password"></label><br>
-    <button class="btn primary" id="go" style="width:100%">登入</button><div class="sub" id="err" style="margin-top:8px"></div></div>`;
-  const go = async () => { $('#go').disabled = true; try { await store.login($('#em').value.trim(), $('#pw').value); await start(); } catch(e){ $('#err').textContent = '登入失敗：' + (e.message||e); $('#go').disabled = false; } };
+    <button class="btn primary" id="go" style="width:100%">登入</button><div class="sub" id="err" style="margin-top:8px"></div>
+    <div class="sub" style="margin-top:10px">連線到：${esc(CFG.supabaseUrl)}</div></div>`;
+  const go = async () => { $('#go').disabled = true; try { await store.login($('#em').value.trim(), $('#pw').value); await start(); }
+    catch(e){ let m = errMsg(e);
+      if (/Invalid login credentials/i.test(m)) m = '帳號或密碼錯誤。帳號要在 Supabase → Authentication → Users 建立，建立時要勾 Auto Confirm User。';
+      else if (/Email not confirmed/i.test(m)) m = '這個帳號還沒確認。到 Supabase → Authentication → Users 點該帳號 → Confirm user。';
+      $('#err').innerHTML = '<span class="unset">登入失敗：</span>' + esc(m); $('#go').disabled = false; } };
   $('#go').onclick = go; $('#pw').onkeydown = e => { if (e.key==='Enter') go(); };
 }
 
 async function start(){
-  try { await reload(); } catch(e){ console.error(e); $('#app').innerHTML = `<div class="card">讀取資料失敗：${esc(e.message||e)}<br><span class="sub">確認已在 Supabase 執行 schema.sql。</span></div>`; return; }
+  try { await reload(); } catch(e){ console.error(e); $('#app').innerHTML = `<div class="diag"><b>讀取資料失敗</b><br>${esc(errMsg(e))}</div>`; return; }
   $('#tabs').classList.remove('hidden');
   if (store.mode === 'supabase') { $('#topact').innerHTML = '<button class="btn small" id="logout">登出</button>'; $('#logout').onclick = async () => { await store.logout(); location.reload(); }; }
   window.onhashchange = () => { window.__mainPaste = null; window.__proofPaste = null; route(); };
   route();
 }
 
+// 檢查 config.js，有問題就說清楚原因
+function checkConfig(){
+  if (!window.LEDGER_CONFIG) return '讀不到 <code>config.js</code>：確認它和 index.html 放在同一層，而且有 push 上去。';
+  let url = (CFG.supabaseUrl || '').trim(), key = (CFG.supabaseAnonKey || '').trim();
+  if (!url && !key) return null;  // 刻意用本機模式
+  if (!url || !key) return '<code>config.js</code> 只填了網址或 key 其中一個，兩個都要填。';
+  url = url.replace(/\/+$/, '').replace(/\/(rest|auth)\/v1.*$/, '');
+  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(url)) return `網址格式不對：<code>${esc(url)}</code>。應該長得像 <code>https://abcdefgh.supabase.co</code>（Project Settings → Data API 的 Project URL）。`;
+  if (/^sb_secret_/.test(key)) return '你填的是 <b>secret key</b>，這把不能放在網頁上！請到 Supabase 停用它、換一把新的，config.js 改填 <b>publishable key</b>（sb_publishable_ 開頭）或 anon key。';
+  if (/^eyJ/.test(key)) { try { const role = JSON.parse(atob(key.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).role;
+      if (role === 'service_role') return '你填的是 <b>service_role key</b>，這把不能放在網頁上！請到 Supabase 重新產生 JWT secret，config.js 改填 anon key。'; } catch(e){ return 'API key 格式不對（可能複製時少了一段）。'; } }
+  else if (!/^sb_publishable_/.test(key)) return 'API key 格式不對：應該是 <code>sb_publishable_</code> 開頭，或 <code>eyJ</code> 開頭的 anon key。';
+  if (!window.supabase) return 'Supabase 程式庫沒有載入（CDN 被擋或網路問題）。換個網路或關掉擋廣告外掛再試。';
+  CFG.supabaseUrl = url; CFG.supabaseAnonKey = key;
+  return true;
+}
+
 (async function boot(){
-  const useSupa = CFG.supabaseUrl && CFG.supabaseAnonKey && window.supabase;
+  const c = checkConfig();
+  const useSupa = c === true;
+  if (typeof c === 'string') window.__cfgProblem = c;
   store = useSupa ? SupaStore : LocalStore;
-  if (CFG.supabaseUrl && !window.supabase) toast('Supabase 程式庫載入失敗，改用本機模式');
-  const ok = await store.init();
+  let ok;
+  try { ok = await store.init(); }
+  catch(e){ window.__cfgProblem = '初始化 Supabase 失敗：' + esc(errMsg(e)); store = LocalStore; ok = await store.init(); }
   if (!ok) renderLogin(); else start();
 })();
 })();
