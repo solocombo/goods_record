@@ -273,6 +273,7 @@ function errMsg(e){
   if (/row-level security|permission denied|violates row-level/i.test(m)) return m + '（被 RLS 擋下：確認已登入，且 schema.sql 的 policy 有建立）';
   return m;
 }
+function saveFile(blob, name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.style.display='none'; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
 function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2200); }
 
 /* ---------- 計算 ---------- */
@@ -542,18 +543,21 @@ function renderHome(){
       <select id="tag"><option value="">全部標籤</option>${tags.map(t=>`<option ${t===ui.tag?'selected':''}>${esc(t)}</option>`).join('')}</select>
       <select id="month"><option value="">全部月份</option>${months.map(m=>`<option ${m===ui.month?'selected':''}>${m}</option>`).join('')}</select>
       <select id="plat"><option value="">全部平台</option>${usedPlats.map(m=>`<option ${m===ui.platform?'selected':''}>${esc(m)}</option>`).join('')}</select>
+      <span class="row" style="gap:6px"><button class="btn small" id="csv1" title="目前篩選出的清單，一筆一列">匯出 CSV（每筆）</button><button class="btn small" id="csv2" title="目前篩選出的清單，每一隻一列">匯出 CSV（每一隻）</button></span>
       <select id="sort"><option value="date">依購買日</option><option value="profit">依利潤</option><option value="cost">依成本</option><option value="unsold">未售出多的在前</option></select>
     </div>
     <div class="shipbar" id="shipbar"></div>
     <div id="list"></div>`;
   $('#sort').value = ui.sort;
+  $('#csv1').onclick = () => { const l = filtered(); if (!l.length) return toast('沒有資料'); exportCSV(l, 'orders'); toast(`已匯出 ${l.length} 筆`); };
+  $('#csv2').onclick = () => { const l = filtered(); if (!l.length) return toast('沒有資料'); exportCSV(l, 'units'); toast('已匯出'); };
   $('#q').oninput = e => { ui.q = e.target.value; if (!e.isComposing) renderList(); };
   $('#q').addEventListener('compositionend', e => { ui.q = e.target.value; renderList(); });
   $('#tag').onchange = e => { ui.tag = e.target.value; renderList(); };
   $('#month').onchange = e => { ui.month = e.target.value; renderList(); };
   $('#plat').onchange = e => { ui.platform = e.target.value; renderList(); };
   $('#sort').onchange = e => { ui.sort = e.target.value; renderList(); };
-  if ($('#exp')) $('#exp').onclick = () => { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(store.exportAll(),null,1)],{type:'application/json'})); a.download=`item-ledger-${today()}.json`; a.click(); };
+  if ($('#exp')) $('#exp').onclick = () => { saveFile(new Blob([JSON.stringify(store.exportAll(),null,1)],{type:'application/json'}), `item-ledger-${today()}.json`); };
   if ($('#imp')) $('#imp').onclick = () => { const i=document.createElement('input'); i.type='file'; i.accept='.json'; i.onchange=async()=>{ try{ const d=JSON.parse(await i.files[0].text()); if(!Array.isArray(d)) throw 0; if(!confirm(`匯入 ${d.length} 筆，會取代目前本機資料？`)) return; store.importAll(d); await reload(); renderHome(); }catch(e){ toast('檔案格式不對'); } }; i.click(); };
   renderList();
 }
@@ -593,6 +597,7 @@ function renderList(){
   });
   $$('.ledger tbody tr').forEach(tr => tr.onclick = e => {
     if (e.target.closest('.unitbtn, .minis')) { openUnits(tr.dataset.id); return; }
+    if (e.target.closest('.exportbtn')) { openExport(items.find(x=>x.id===tr.dataset.id)); return; }
     if (e.target.closest('.proofbtn')) { gallery(store.proofs(items.find(x=>x.id===tr.dataset.id)).map(x=>x.url), 0); return; }
     if (e.target.closest('a, select')) return;
     location.hash = 'edit/' + tr.dataset.id;
@@ -612,6 +617,7 @@ function rowHTML(p){
     <td class="title-cell"><div class="t">${esc(p.title||'(未命名)')}</div>
       <div class="meta">${esc(p.purchase_date)}${p.platform ? `<b class="plat">${esc(p.platform)}</b>` : ''}</div>
       ${p.source_url || store.proofs(p).length ? `<div class="meta">${p.source_url ? `<a href="${esc(p.source_url)}" target="_blank" rel="noopener">原始網址</a>` : ''}${store.proofs(p).length ? `<button class="proofbtn" type="button">購買證明 ${store.proofs(p).length}</button>` : ''}</div>` : ''}
+      <div class="meta"><button class="proofbtn exportbtn" type="button">輸出紀錄</button></div>
       <div>${(p.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div></td>
     <td class="num">${jpy(p.price_jpy)}</td>
     <td class="num">${twd(paid(p))}${p.paid_twd==null && p.rate ? `<span class="est">匯率 ${p.rate}</span>`:''}</td>
@@ -707,6 +713,102 @@ document.addEventListener('paste', e => {
   if (window.__mainPaste) { e.preventDefault(); window.__mainPaste(it.getAsFile()); toast('已貼上主圖'); }
 });
 
+/* ---------- 輸出 ---------- */
+const plain = v => v == null ? '—' : (v < 0 ? '-' : '') + 'NT$' + Math.round(Math.abs(v)).toLocaleString('zh-TW');
+function orderText(p, opt){
+  const units = p.units || [], al = alloc(p), L = [];
+  L.push(`【${p.title || '(未命名)'}】`);
+  L.push(`購買日期：${p.purchase_date}` + (p.platform ? `｜平台：${p.platform}` : '') + (p.ship_status ? `｜${p.ship_status}` : ''));
+  if (p.source_url) L.push(`原始網址：${p.source_url}`);
+  if ((p.tags||[]).length) L.push(`標籤：${p.tags.join('、')}`);
+  L.push('');
+  L.push('— 成本 —');
+  if (p.price_jpy != null) L.push(`原價：${jpy(p.price_jpy)}` + (p.paid_twd == null && p.rate ? `（匯率 ${p.rate}）` : ''));
+  L.push(`台幣定價：${plain(paid(p))}`);
+  if (+p.shipping) L.push(`運費：${plain(+p.shipping)}`);
+  if (+p.fee) L.push(`手續費：${plain(+p.fee)}`);
+  if (+p.buy_tax) L.push(`海關稅：${plain(+p.buy_tax)}`);
+  if (+p.discount) L.push(`折扣：-${plain(+p.discount)}`);
+  L.push(`實際購買價（總成本）：${plain(cost(p))}`);
+  if (opt.units && units.length) {
+    L.push('');
+    L.push(`— 每一隻（共 ${units.length} 隻，${allocMode(units).replace('（每隻都填日幣價就會改按比例）','')}）—`);
+    units.forEach((u,i) => {
+      let line = `${i+1}. ${u.name || '第 ' + (i+1) + ' 隻'}｜成本 ${plain(al[i])}`;
+      if (u.list_price != null) line += `｜定價 ${plain(+u.list_price)}`;
+      if (opt.sale) {
+        line += `｜${STATUS[u.status] || ''}`;
+        if (sold(u)) {
+          line += ` ${plain(+u.sold_price||0)}（利潤 ${plain((+u.sold_price||0) - (al[i]||0))}）`;
+          const extra = [u.sold_date, u.sold_place, u.trade_method, u.buyer && '買家 ' + u.buyer, u.settled ? '已分帳' : '未分帳'].filter(Boolean);
+          if (extra.length) line += ` ${extra.join('・')}`;
+        } else if (u.status === 'reserved') {
+          const extra = [u.trade_method, u.buyer && '買家 ' + u.buyer].filter(Boolean); if (extra.length) line += ` ${extra.join('・')}`;
+        }
+      }
+      L.push(line);
+    });
+  }
+  if (opt.sale) {
+    const st = soldTotal(p), un = units.filter(u=>sold(u)&&!u.settled).reduce((s,u)=>s+(+u.sold_price||0),0);
+    L.push('');
+    L.push(`— 銷售 —`);
+    L.push(`已賣出：${soldCount(p)}/${units.length} 隻，${plain(st)}` + (un ? `（未分帳 ${plain(un)}）` : ''));
+    L.push(`目前利潤：${plain(profit(p))}` + (units.length - soldCount(p) > 0 ? `｜全賣完：${plain(expectProfit(p))}` : ''));
+  }
+  if (opt.note && p.note) { L.push(''); L.push(`備註：${p.note}`); }
+  return L.join('\n');
+}
+function openExport(p){
+  const bg = document.createElement('div'); bg.className = 'modal-bg';
+  const opt = JSON.parse(localStorage.getItem('ledger-export-opt') || '{"units":true,"sale":true,"note":false}');
+  bg.innerHTML = `<div class="modal" style="width:min(640px,100%)">
+    <div class="mh"><div class="grow"><div class="mt">輸出紀錄</div><div class="sub">${esc(p.title||'')}</div></div><button class="x" data-a="x">✕</button></div>
+    <div class="row" style="margin-bottom:8px;gap:14px">
+      <label class="chk"><input type="checkbox" data-o="units" ${opt.units?'checked':''}> 每一隻的成本</label>
+      <label class="chk"><input type="checkbox" data-o="sale" ${opt.sale?'checked':''}> 售出／分帳資訊</label>
+      <label class="chk"><input type="checkbox" data-o="note" ${opt.note?'checked':''}> 備註</label>
+    </div>
+    <textarea id="extext" style="width:100%;min-height:300px;padding:10px;border:1px solid var(--line2);border-radius:10px;background:#fff;font:13.5px/1.6 ui-monospace,Menlo,Consolas,'Noto Sans TC',monospace;resize:vertical"></textarea>
+    <div class="sub" style="margin:4px 0 0">可以先在框裡修改再複製。</div>
+    <div class="row mfoot" style="justify-content:flex-end">
+      ${navigator.share ? '<button class="btn" data-a="share">分享…</button>' : ''}
+      <button class="btn" data-a="dl">下載 .txt</button>
+      <button class="btn primary" data-a="copy">複製</button></div></div>`;
+  const ta = $('#extext', bg);
+  const fill = () => { ta.value = orderText(p, opt); };
+  $$('[data-o]', bg).forEach(c => c.onchange = () => { opt[c.dataset.o] = c.checked; localStorage.setItem('ledger-export-opt', JSON.stringify(opt)); fill(); });
+  const close = () => { bg.remove(); document.removeEventListener('keydown', key); };
+  const key = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', key);
+  bg.onclick = e => { if (e.target === bg) close(); };
+  $('[data-a=x]', bg).onclick = close;
+  $('[data-a=copy]', bg).onclick = async () => {
+    try { await navigator.clipboard.writeText(ta.value); toast('已複製'); }
+    catch(e){ ta.select(); document.execCommand('copy'); toast('已複製'); }
+  };
+  $('[data-a=dl]', bg).onclick = () => { saveFile(new Blob([ta.value], {type:'text/plain;charset=utf-8'}), `${(p.title||'紀錄').replace(/[\\/:*?"<>|]/g,'_')}_${p.purchase_date}.txt`); };
+  const sh = $('[data-a=share]', bg); if (sh) sh.onclick = () => navigator.share({ title: p.title, text: ta.value }).catch(()=>{});
+  document.body.appendChild(bg); fill(); ta.focus(); ta.setSelectionRange(0,0); ta.scrollTop = 0;
+}
+// 首頁清單匯出 CSV（Excel 可直接開）
+function exportCSV(list, mode){
+  const q = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
+  let head, rows = [];
+  if (mode === 'units') {
+    head = ['購買日期','商品名稱','平台','運送狀態','原始網址','實際購買價(總成本)','這隻','日幣價','分攤成本','定價','狀態','賣出價','利潤','售出日期','售出位置','交易方式','買家','已分帳','分帳日期'];
+    list.forEach(p => { const al = alloc(p); (p.units||[]).forEach((u,i) => rows.push([p.purchase_date, p.title, p.platform, p.ship_status, p.source_url, cost(p),
+      u.name, u.price_jpy, al[i]==null?'':Math.round(al[i]), u.list_price, STATUS[u.status], sold(u)?u.sold_price:'', sold(u)&&al[i]!=null?Math.round((+u.sold_price||0)-al[i]):'',
+      u.sold_date, u.sold_place, u.trade_method, u.buyer, sold(u)?(u.settled?'是':'否'):'', u.settled_date])); });
+  } else {
+    head = ['購買日期','商品名稱','平台','運送狀態','標籤','原始網址','原價(日幣)','匯率','台幣定價','運費','手續費','海關稅','折扣','實際購買價(總成本)','隻數','已售出','總賣出價','未分帳','利潤','全賣完利潤','備註'];
+    list.forEach(p => rows.push([p.purchase_date, p.title, p.platform, p.ship_status, (p.tags||[]).join('、'), p.source_url, p.price_jpy, p.rate, paid(p), p.shipping, p.fee, p.buy_tax, p.discount, cost(p),
+      (p.units||[]).length, soldCount(p), soldTotal(p), (p.units||[]).filter(u=>sold(u)&&!u.settled).reduce((s,u)=>s+(+u.sold_price||0),0), profit(p), expectProfit(p), p.note]));
+  }
+  const csv = '\ufeff' + [head, ...rows].map(r => r.map(q).join(',')).join('\r\n');
+  saveFile(new Blob([csv], {type:'text/csv;charset=utf-8'}), `商品紀錄_${mode==='units'?'每一隻':'每筆'}_${today()}.csv`);
+}
+
 /* ---------- 每隻定價小視窗 ---------- */
 function openUnits(id){
   const p = items.find(x=>x.id===id); if (!p) return;
@@ -730,12 +832,13 @@ function openUnits(id){
       <div id="uw">${unitsHTML(units, alloc(p, units))}</div>
       <div class="row mfoot" style="justify-content:space-between">
         <button class="btn small" id="addu">＋ 加一隻</button>
-        <div class="row"><button class="btn" id="cancel">取消</button><button class="btn primary" id="saveu">儲存</button></div></div>
+        <div class="row"><button class="btn" id="mexp">輸出紀錄</button><button class="btn" id="cancel">取消</button><button class="btn primary" id="saveu">儲存</button></div></div>
     </div>`;
     bindUnits($('#uw', bg), units, draw, () => p, () => imgs[p.id], () => { $('#mhsum', bg).innerHTML = head(); $('#mhmode', bg).textContent = allocMode(units); });
     $('#addu', bg).onclick = () => { units.push(newUnit()); draw(); };
     $('#close', bg).onclick = $('#cancel', bg).onclick = close;
     if ($('#zoomimg', bg)) $('#zoomimg', bg).onclick = () => zoom(imgs[p.id]);
+    $('#mexp', bg).onclick = () => openExport({...p, units});
     if ($('#mproof', bg)) $('#mproof', bg).onclick = () => gallery(store.proofs(p).map(x=>x.url), 0);
     $('#saveu', bg).onclick = async (e) => {
       e.target.disabled = true; e.target.textContent = '儲存中…';
@@ -820,7 +923,7 @@ function renderForm(edit){
 
     <div class="row" style="justify-content:space-between">
       ${isNew ? '<span></span>' : '<button class="btn danger" id="del">刪除這筆</button>'}
-      <span class="row"><button class="btn" id="cancel">取消</button><button class="btn primary" id="save">儲存</button></span></div>`;
+      <span class="row"><button class="btn" id="fexp">輸出紀錄</button><button class="btn" id="cancel">取消</button><button class="btn primary" id="save">儲存</button></span></div>`;
 
   const val = id => $('#'+id).value;
   const read = () => {
@@ -895,6 +998,7 @@ function renderForm(edit){
   $('#getrate').onclick = async (e) => { e.target.disabled = true; e.target.textContent = '…'; const r = await fetchRate(); e.target.disabled = false; e.target.textContent = '即時';
     if (r) { $('#rate').value = r; calc(); toast('匯率 ' + r); } else toast('抓不到匯率，請手動輸入'); };
   $('#addu').onclick = () => { units.push(newUnit()); drawUnits(); };
+  $('#fexp').onclick = () => { read(); openExport({...p, tags:[...tags], units}); };
   $('#addn').onclick = () => { const n = parseInt(prompt('要加幾隻？', '3')); if (n > 0 && n <= 50) { for (let i=0;i<n;i++) units.push(newUnit()); drawUnits(); } };
   $('#cancel').onclick = () => history.length > 1 ? history.back() : (location.hash = 'home');
   if ($('#del')) $('#del').onclick = async () => { if (!confirm('確定刪除這筆紀錄和所有「每一隻」？')) return; try { await store.remove(p.id); await reload(); toast('已刪除'); location.hash='home'; } catch(err){ toast('刪除失敗：'+errMsg(err)); } };
